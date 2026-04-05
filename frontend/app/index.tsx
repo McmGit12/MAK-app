@@ -55,7 +55,12 @@ export default function LoginScreen() {
     try {
       const response = await api.emailLogin(email);
       login(response);
-      router.replace('/(tabs)');
+      // If no display name, go to set-name screen
+      if (!response.display_name) {
+        router.replace('/set-name');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
@@ -110,7 +115,12 @@ export default function LoginScreen() {
     try {
       const response = await api.verifyOtp(phone, otp);
       login(response);
-      router.replace('/(tabs)');
+      // If no display name, go to set-name screen
+      if (!response.display_name) {
+        router.replace('/set-name');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (err: any) {
       setError(err.message || 'Invalid OTP');
     } finally {

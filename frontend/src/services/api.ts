@@ -22,6 +22,14 @@ export const api = {
     return response.data;
   },
 
+  updateDisplayName: async (userId: string, displayName: string) => {
+    const response = await apiClient.put('/auth/update-name', {
+      user_id: userId,
+      display_name: displayName,
+    });
+    return response.data;
+  },
+
   requestOtp: async (phone: string) => {
     const response = await apiClient.post('/auth/request-otp', { phone });
     return response.data;

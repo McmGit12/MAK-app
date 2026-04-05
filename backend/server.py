@@ -43,12 +43,18 @@ logger = logging.getLogger(__name__)
 class UserCreate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
+    display_name: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: str
     user_hash: str
     login_method: str
+    display_name: Optional[str] = None
     created_at: datetime
+
+class UpdateDisplayName(BaseModel):
+    user_id: str
+    display_name: str
 
 class OTPRequest(BaseModel):
     phone: str
@@ -227,11 +233,33 @@ async def guest_login():
         "id": user_id,
         "user_hash": guest_hash,
         "login_method": "guest",
+        "display_name": "Guest",
         "created_at": datetime.utcnow()
     }
     await db.users.insert_one(new_user)
     
     return UserResponse(**new_user)
+
+@api_router.put("/auth/update-name", response_model=UserResponse)
+async def update_display_name(data: UpdateDisplayName):
+    """Update user's display name"""
+    user = await db.users.find_one({"id": data.user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    await db.users.update_one(
+        {"id": data.user_id},
+        {"$set": {"display_name": data.display_name}}
+    )
+    
+    user["display_name"] = data.display_name
+    return UserResponse(
+        id=user["id"],
+        user_hash=user["user_hash"],
+        login_method=user["login_method"],
+        display_name=data.display_name,
+        created_at=user["created_at"]
+    )
 
 @api_router.post("/auth/email-login", response_model=UserResponse)
 async def email_login(data: EmailLogin):
@@ -246,6 +274,7 @@ async def email_login(data: EmailLogin):
             id=existing_user["id"],
             user_hash=existing_user["user_hash"],
             login_method=existing_user["login_method"],
+            display_name=existing_user.get("display_name"),
             created_at=existing_user["created_at"]
         )
     
@@ -255,6 +284,7 @@ async def email_login(data: EmailLogin):
         "id": user_id,
         "user_hash": user_hash,
         "login_method": "email",
+        "display_name": None,
         "created_at": datetime.utcnow()
     }
     await db.users.insert_one(new_user)
@@ -294,6 +324,7 @@ async def verify_otp(data: OTPVerify):
             id=existing_user["id"],
             user_hash=existing_user["user_hash"],
             login_method=existing_user["login_method"],
+            display_name=existing_user.get("display_name"),
             created_at=existing_user["created_at"]
         )
     
@@ -303,6 +334,7 @@ async def verify_otp(data: OTPVerify):
         "id": user_id,
         "user_hash": user_hash,
         "login_method": "phone",
+        "display_name": None,
         "created_at": datetime.utcnow()
     }
     await db.users.insert_one(new_user)

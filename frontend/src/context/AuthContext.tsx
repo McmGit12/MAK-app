@@ -5,6 +5,7 @@ interface User {
   id: string;
   user_hash: string;
   login_method: string;
+  display_name?: string | null;
   created_at: string;
 }
 
@@ -13,6 +14,7 @@ interface AuthContextType {
   loading: boolean;
   login: (userData: User) => void;
   logout: () => void;
+  updateUserName: (displayName: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -58,8 +60,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateUserName = async (displayName: string) => {
+    if (!user) return;
+    try {
+      const updatedUser = { ...user, display_name: displayName };
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
+      setUser(updatedUser);
+    } catch (error) {
+      console.error('Error updating user name:', error);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, updateUserName }}>
       {children}
     </AuthContext.Provider>
   );
