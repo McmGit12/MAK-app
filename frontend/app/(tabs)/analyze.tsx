@@ -4,39 +4,51 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   ActivityIndicator,
   Alert,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Image } from 'expo-image';
 import { useAuth } from '../../src/context/AuthContext';
 import { api } from '../../src/services/api';
 
 export default function AnalyzeScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const [image, setImage] = useState<string | null>(null);
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [cameraMode, setCameraMode] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
 
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-      base64: true,
-    });
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
 
-    if (!result.canceled && result.assets[0].base64) {
-      setImage(`data:image/jpeg;base64,${result.assets[0].base64}`);
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        // Use uri for display, base64 for API
+        setImageUri(asset.uri);
+        if (asset.base64) {
+          setImageBase64(asset.base64);
+        }
+      }
+    } catch (err) {
+      console.error('Image picker error:', err);
+      Alert.alert('Error', 'Failed to select image');
     }
   };
 
@@ -58,7 +70,8 @@ export default function AnalyzeScreen() {
           quality: 0.8,
           base64: true,
         });
-        setImage(`data:image/jpeg;base64,${photo.base64}`);
+        setImageUri(photo.uri);
+        setImageBase64(photo.base64);
         setCameraMode(false);
       } catch (err) {
         console.error('Failed to capture:', err);
@@ -67,14 +80,20 @@ export default function AnalyzeScreen() {
     }
   };
 
+  const clearImage = () => {
+    setImageUri(null);
+    setImageBase64(null);
+  };
+
   const analyzeImage = async () => {
-    if (!image || !user?.id) return;
+    if (!imageBase64 || !user?.id) {
+      Alert.alert('Error', 'Please select or take a photo first');
+      return;
+    }
 
     setAnalyzing(true);
     try {
-      // Extract base64 data without the prefix
-      const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
-      const result = await api.analyzeSkin(base64Data, user.id);
+      const result = await api.analyzeSkin(imageBase64, user.id);
       
       router.push({
         pathname: '/analysis-result',
@@ -130,12 +149,16 @@ export default function AnalyzeScreen() {
 
         {/* Image Preview or Upload Area */}
         <View style={styles.imageSection}>
-          {image ? (
+          {imageUri ? (
             <View style={styles.imageContainer}>
-              <Image source={{ uri: image }} style={styles.previewImage} />
+              <Image 
+                source={{ uri: imageUri }} 
+                style={styles.previewImage}
+                contentFit="cover"
+              />
               <TouchableOpacity
                 style={styles.removeImageButton}
-                onPress={() => setImage(null)}
+                onPress={clearImage}
               >
                 <Ionicons name="close-circle" size={32} color="#FF6B6B" />
               </TouchableOpacity>
@@ -154,7 +177,7 @@ export default function AnalyzeScreen() {
         </View>
 
         {/* Action Buttons */}
-        {!image ? (
+        {!imageUri ? (
           <View style={styles.actionButtons}>
             <TouchableOpacity style={styles.actionButton} onPress={takePhoto}>
               <View style={styles.actionButtonIcon}>
@@ -191,7 +214,7 @@ export default function AnalyzeScreen() {
 
             <TouchableOpacity
               style={styles.retakeButton}
-              onPress={() => setImage(null)}
+              onPress={clearImage}
             >
               <Text style={styles.retakeButtonText}>Choose Different Photo</Text>
             </TouchableOpacity>

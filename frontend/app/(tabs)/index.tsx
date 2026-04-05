@@ -84,8 +84,9 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Welcome back</Text>
+            <Text style={styles.greeting}>Welcome to</Text>
             <Text style={styles.title}>MAK</Text>
+            <Text style={styles.subtitle}>Your Personalized Makeup Buddy</Text>
           </View>
           <View style={styles.logoSmall}>
             <Ionicons name="sparkles" size={24} color="#D4AF37" />
@@ -204,7 +205,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 24,
   },
   greeting: {
@@ -212,9 +213,15 @@ const styles = StyleSheet.create({
     color: '#888',
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#D4AF37',
+    letterSpacing: 2,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
   },
   logoSmall: {
     width: 48,
