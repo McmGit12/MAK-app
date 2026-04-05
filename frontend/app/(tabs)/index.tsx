@@ -84,7 +84,9 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Welcome to</Text>
+            <Text style={styles.greeting}>
+              {user?.login_method === 'guest' ? 'Welcome, Guest' : 'Welcome'}
+            </Text>
             <Text style={styles.title}>MAK</Text>
             <Text style={styles.subtitle}>Your Personalized Makeup Buddy</Text>
           </View>
