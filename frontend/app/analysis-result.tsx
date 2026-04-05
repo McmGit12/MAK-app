@@ -186,7 +186,7 @@ export default function AnalysisResultScreen() {
               color={activeTab === 'ai' ? '#D4AF37' : '#888'}
             />
             <Text style={[styles.tabText, activeTab === 'ai' && styles.activeTabText]}>
-              AI Personalized
+              For You
             </Text>
           </TouchableOpacity>
           <TouchableOpacity

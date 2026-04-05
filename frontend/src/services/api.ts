@@ -17,6 +17,11 @@ export const api = {
     return response.data;
   },
 
+  guestLogin: async () => {
+    const response = await apiClient.post('/auth/guest-login');
+    return response.data;
+  },
+
   requestOtp: async (phone: string) => {
     const response = await apiClient.post('/auth/request-otp', { phone });
     return response.data;

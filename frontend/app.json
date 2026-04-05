@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "ComplexionFit",
-    "slug": "complexionfit",
+    "name": "MAK",
+    "slug": "mak-makeup-buddy",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "complexionfit",
+    "scheme": "mak",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
@@ -45,13 +45,13 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow ComplexionFit to access your camera for skin analysis"
+          "cameraPermission": "Allow MAK to access your camera for skin analysis"
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow ComplexionFit to access your photos for skin analysis"
+          "photosPermission": "Allow MAK to access your photos for skin analysis"
         }
       ]
     ],

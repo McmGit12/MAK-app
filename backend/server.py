@@ -217,6 +217,22 @@ async def analyze_skin_with_ai(image_base64: str) -> Dict[str, Any]:
 
 # ==================== AUTH ENDPOINTS ====================
 
+@api_router.post("/auth/guest-login", response_model=UserResponse)
+async def guest_login():
+    """Create a guest user without email or phone"""
+    user_id = generate_user_id()
+    guest_hash = f"guest_{user_id[:8]}"
+    
+    new_user = {
+        "id": user_id,
+        "user_hash": guest_hash,
+        "login_method": "guest",
+        "created_at": datetime.utcnow()
+    }
+    await db.users.insert_one(new_user)
+    
+    return UserResponse(**new_user)
+
 @api_router.post("/auth/email-login", response_model=UserResponse)
 async def email_login(data: EmailLogin):
     """Simple email login - creates user if not exists"""

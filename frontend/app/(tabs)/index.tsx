@@ -45,7 +45,7 @@ export default function HomeScreen() {
     {
       icon: 'camera',
       title: 'Skin Analysis',
-      description: 'AI-powered skin assessment',
+      description: 'Personalized skin assessment',
       route: '/(tabs)/analyze',
     },
     {
@@ -85,7 +85,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Welcome back</Text>
-            <Text style={styles.title}>ComplexionFit</Text>
+            <Text style={styles.title}>MAK</Text>
           </View>
           <View style={styles.logoSmall}>
             <Ionicons name="sparkles" size={24} color="#D4AF37" />

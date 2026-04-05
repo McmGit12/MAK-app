@@ -125,7 +125,7 @@ export default function AnalyzeScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Skin Analysis</Text>
-          <Text style={styles.subtitle}>Get AI-powered beauty recommendations</Text>
+          <Text style={styles.subtitle}>Get personalized beauty recommendations</Text>
         </View>
 
         {/* Image Preview or Upload Area */}

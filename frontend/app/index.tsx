@@ -8,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Dimensions,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,8 +15,6 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/context/AuthContext';
 import { api } from '../src/services/api';
-
-const { width } = Dimensions.get('window');
 
 type LoginTab = 'email' | 'phone';
 
@@ -30,6 +27,7 @@ export default function LoginScreen() {
   const [otp, setOtp] = useState('');
   const [showOtpInput, setShowOtpInput] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
   const [error, setError] = useState('');
   const [demoOtp, setDemoOtp] = useState('');
 
@@ -62,6 +60,21 @@ export default function LoginScreen() {
       setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    setGuestLoading(true);
+    setError('');
+    
+    try {
+      const response = await api.guestLogin();
+      login(response);
+      router.replace('/(tabs)');
+    } catch (err: any) {
+      setError(err.message || 'Guest login failed');
+    } finally {
+      setGuestLoading(false);
     }
   };
 
@@ -120,8 +133,8 @@ export default function LoginScreen() {
             <View style={styles.logoContainer}>
               <Ionicons name="sparkles" size={48} color="#D4AF37" />
             </View>
-            <Text style={styles.brandName}>ComplexionFit</Text>
-            <Text style={styles.tagline}>Your AI Beauty Advisor</Text>
+            <Text style={styles.brandName}>MAK</Text>
+            <Text style={styles.tagline}>Your Personalized Makeup Buddy</Text>
           </View>
 
           {/* Login Card */}
@@ -271,6 +284,29 @@ export default function LoginScreen() {
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             ) : null}
+
+            {/* Divider */}
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Guest Login Button */}
+            <TouchableOpacity
+              style={styles.guestButton}
+              onPress={handleGuestLogin}
+              disabled={guestLoading}
+            >
+              {guestLoading ? (
+                <ActivityIndicator color="#D4AF37" />
+              ) : (
+                <>
+                  <Ionicons name="person-outline" size={20} color="#D4AF37" />
+                  <Text style={styles.guestButtonText}>Continue as Guest</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
 
           {/* Privacy Note */}
@@ -313,17 +349,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(212, 175, 55, 0.3)',
   },
   brandName: {
-    fontSize: 32,
+    fontSize: 42,
     fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 1,
+    letterSpacing: 4,
   },
   tagline: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#D4AF37',
-    marginTop: 4,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
+    marginTop: 8,
+    letterSpacing: 1,
+    textAlign: 'center',
   },
   loginCard: {
     backgroundColor: '#1A1A1A',
@@ -415,6 +451,37 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#FF6B6B',
     fontSize: 14,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(212, 175, 55, 0.2)',
+  },
+  dividerText: {
+    color: '#666',
+    paddingHorizontal: 16,
+    fontSize: 13,
+  },
+  guestButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: 'transparent',
+    borderRadius: 12,
+    height: 52,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.4)',
+  },
+  guestButtonText: {
+    color: '#D4AF37',
+    fontSize: 16,
+    fontWeight: '600',
   },
   privacyNote: {
     color: '#666',

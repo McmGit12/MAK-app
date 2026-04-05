@@ -8,6 +8,8 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Share,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -23,6 +25,23 @@ export default function ProfileScreen() {
   const [feedbackCategory, setFeedbackCategory] = useState('app_experience');
   const [feedbackComment, setFeedbackComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const handleShareApp = async () => {
+    try {
+      const message = Platform.OS === 'ios'
+        ? 'Check out MAK - Your Personalized Makeup Buddy! Get personalized skin analysis and makeup recommendations.'
+        : 'Check out MAK - Your Personalized Makeup Buddy! Get personalized skin analysis and makeup recommendations.\n\nDownload now!';
+      
+      await Share.share({
+        message: message,
+        title: 'MAK - Your Personalized Makeup Buddy',
+      });
+    } catch (error: any) {
+      if (error.message !== 'User did not share') {
+        Alert.alert('Error', 'Unable to share at this time');
+      }
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -72,6 +91,12 @@ export default function ProfileScreen() {
 
   const menuItems = [
     {
+      icon: 'share-social-outline',
+      title: 'Share App',
+      description: 'Invite friends to try MAK',
+      onPress: handleShareApp,
+    },
+    {
       icon: 'chatbubble-outline',
       title: 'Give Feedback',
       description: 'Help us improve',
@@ -86,8 +111,8 @@ export default function ProfileScreen() {
     {
       icon: 'information-circle-outline',
       title: 'About',
-      description: 'Learn more about ComplexionFit',
-      onPress: () => Alert.alert('ComplexionFit', 'Version 1.0.0\n\nYour AI-powered beauty advisor that analyzes your skin and provides personalized makeup recommendations.'),
+      description: 'Learn more about MAK',
+      onPress: () => Alert.alert('MAK', 'Version 1.0.0\n\nYour personalized makeup buddy that analyzes your skin and provides personalized makeup recommendations.'),
     },
   ];
 
