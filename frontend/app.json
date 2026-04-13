@@ -10,12 +10,15 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.mak.makeupbuddy",
       "infoPlist": {
         "NSCameraUsageDescription": "Take selfies for skin analysis",
         "NSPhotoLibraryUsageDescription": "Select photos for skin analysis"
       }
     },
     "android": {
+      "package": "com.mak.makeupbuddy",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0D0D0D"
@@ -57,6 +60,12 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id"
+      }
+    },
+    "owner": "your-expo-username"
   }
 }
