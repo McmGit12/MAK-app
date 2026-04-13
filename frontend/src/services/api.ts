@@ -11,6 +11,17 @@ const apiClient = axios.create({
 });
 
 export const api = {
+  // App Install Tracking
+  registerInstall: async (deviceId: string, platform: string = 'android', appVersion: string = '1.0.0') => {
+    const response = await apiClient.post(`/app/register-install?device_id=${deviceId}&platform=${platform}&app_version=${appVersion}`);
+    return response.data;
+  },
+
+  getInstallStats: async () => {
+    const response = await apiClient.get('/app/install-stats');
+    return response.data;
+  },
+
   // Auth endpoints
   emailLogin: async (email: string) => {
     const response = await apiClient.post('/auth/email-login', { email });

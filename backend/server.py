@@ -221,6 +221,60 @@ async def analyze_skin_with_ai(image_base64: str) -> Dict[str, Any]:
             ]
         }
 
+# ==================== APP INSTALL TRACKING ====================
+
+class AppInstall(BaseModel):
+    device_id: str
+    platform: str  # android or ios
+    app_version: str
+    installed_at: datetime = Field(default_factory=datetime.utcnow)
+
+class InstallStats(BaseModel):
+    total_installs: int
+    android_installs: int
+    ios_installs: int
+    recent_installs_24h: int
+
+@api_router.post("/app/register-install")
+async def register_install(device_id: str, platform: str = "android", app_version: str = "1.0.0"):
+    """Register an app install - called when app is first opened"""
+    # Check if device already registered
+    existing = await db.app_installs.find_one({"device_id": device_id})
+    if existing:
+        return {"status": "already_registered", "install_id": existing.get("id")}
+    
+    install_id = str(uuid.uuid4())
+    install_data = {
+        "id": install_id,
+        "device_id": device_id,
+        "platform": platform.lower(),
+        "app_version": app_version,
+        "installed_at": datetime.utcnow()
+    }
+    await db.app_installs.insert_one(install_data)
+    
+    logger.info(f"New app install registered: {platform} - {device_id[:8]}...")
+    return {"status": "registered", "install_id": install_id}
+
+@api_router.get("/app/install-stats", response_model=InstallStats)
+async def get_install_stats():
+    """Get app installation statistics"""
+    total = await db.app_installs.count_documents({})
+    android = await db.app_installs.count_documents({"platform": "android"})
+    ios = await db.app_installs.count_documents({"platform": "ios"})
+    
+    # Recent installs in last 24 hours
+    from datetime import timedelta
+    yesterday = datetime.utcnow() - timedelta(hours=24)
+    recent = await db.app_installs.count_documents({"installed_at": {"$gte": yesterday}})
+    
+    return InstallStats(
+        total_installs=total,
+        android_installs=android,
+        ios_installs=ios,
+        recent_installs_24h=recent
+    )
+
 # ==================== AUTH ENDPOINTS ====================
 
 @api_router.post("/auth/guest-login", response_model=UserResponse)
