@@ -214,6 +214,14 @@ export default function AnalysisResultScreen() {
           <Ionicons name="camera" size={22} color="#FFF" />
           <Text style={styles.newAnalysisText}>New Analysis</Text>
         </TouchableOpacity>
+
+        {/* Disclaimer */}
+        <View style={styles.disclaimerRow}>
+          <Ionicons name="shield-checkmark-outline" size={13} color={colors.textTertiary} />
+          <Text style={[styles.disclaimerText, { color: colors.textTertiary }]}>
+            We respect your privacy and do not store any personal data. Results are for informational purposes only — try recommendations at your own discretion.
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -263,4 +271,6 @@ const styles = StyleSheet.create({
   recReasonText: { flex: 1, fontSize: 12, lineHeight: 18 },
   newAnalysisButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 14, padding: 16 },
   newAnalysisText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
+  disclaimerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 16, paddingHorizontal: 4 },
+  disclaimerText: { flex: 1, fontSize: 10, lineHeight: 15 },
 });

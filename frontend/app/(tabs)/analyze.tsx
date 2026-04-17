@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -19,16 +18,50 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
 import { api } from '../../src/services/api';
 
+type AnalysisMode = 'skin_care' | 'makeup';
+
+const DISCLAIMER = 'We respect your privacy and do not store any personal data. Results are for informational purposes only — try recommendations at your own discretion.';
+
 export default function AnalyzeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { colors } = useTheme();
+  const [mode, setMode] = useState<AnalysisMode>('skin_care');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [cameraMode, setCameraMode] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
+
+  const modeConfig = {
+    skin_care: {
+      title: 'Skin Care Routine',
+      subtitle: 'Analyze your skin type, concerns, and get a personalized daily routine',
+      icon: 'leaf' as const,
+      analyzeText: 'Analyze My Skin',
+      analyzingText: 'Analyzing Skin...',
+      tips: [
+        { icon: 'sunny-outline', text: 'Good natural lighting' },
+        { icon: 'happy-outline', text: 'Face the camera directly' },
+        { icon: 'water-outline', text: 'Clean face, no makeup' },
+      ],
+    },
+    makeup: {
+      title: 'Makeup Suggestions',
+      subtitle: 'Scan your face to get personalized blush, lip, eye, and hair styling tips',
+      icon: 'color-palette' as const,
+      analyzeText: 'Get Makeup Tips',
+      analyzingText: 'Finding Your Look...',
+      tips: [
+        { icon: 'sunny-outline', text: 'Good lighting for accurate color read' },
+        { icon: 'happy-outline', text: 'Face forward, eyes open' },
+        { icon: 'brush-outline', text: 'With or without current makeup' },
+      ],
+    },
+  };
+
+  const currentConfig = modeConfig[mode];
 
   const pickImage = async () => {
     try {
@@ -45,7 +78,6 @@ export default function AnalyzeScreen() {
         if (asset.base64) setImageBase64(asset.base64);
       }
     } catch (err) {
-      console.error('Image picker error:', err);
       Alert.alert('Error', 'Failed to select image');
     }
   };
@@ -53,7 +85,7 @@ export default function AnalyzeScreen() {
   const takePhoto = async () => {
     if (!permission?.granted) {
       const result = await requestPermission();
-      if (!result.granted) { Alert.alert('Permission Required', 'Camera access is needed to take photos.'); return; }
+      if (!result.granted) { Alert.alert('Permission Required', 'Camera access is needed.'); return; }
     }
     setCameraMode(true);
   };
@@ -65,10 +97,7 @@ export default function AnalyzeScreen() {
         setImageUri(photo.uri);
         setImageBase64(photo.base64);
         setCameraMode(false);
-      } catch (err) {
-        console.error('Failed to capture:', err);
-        Alert.alert('Error', 'Failed to capture photo');
-      }
+      } catch (err) { Alert.alert('Error', 'Failed to capture photo'); }
     }
   };
 
@@ -78,8 +107,8 @@ export default function AnalyzeScreen() {
     if (!imageBase64 || !user?.id) { Alert.alert('Error', 'Please select or take a photo first'); return; }
     setAnalyzing(true);
     try {
-      const result = await api.analyzeSkin(imageBase64, user.id);
-      router.push({ pathname: '/analysis-result', params: { analysisId: result.id } });
+      const result = await api.analyzeSkin(imageBase64, user.id, mode);
+      router.push({ pathname: '/analysis-result', params: { analysisId: result.id, mode: mode } });
     } catch (err: any) {
       Alert.alert('Analysis Failed', err.message || 'Please try again with a clearer photo');
     } finally { setAnalyzing(false); }
@@ -110,12 +139,47 @@ export default function AnalyzeScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Skin Analysis</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Get personalized beauty recommendations</Text>
+          <Text style={[styles.pageTitle, { color: colors.text }]}>Choose Your Analysis</Text>
+          <Text style={[styles.pageSubtitle, { color: colors.textSecondary }]}>What would you like to know?</Text>
         </View>
 
+        {/* Mode Tabs */}
+        <View style={[styles.modeTabs, { backgroundColor: colors.surfaceVariant }]}>
+          <TouchableOpacity
+            style={[styles.modeTab, mode === 'skin_care' && { backgroundColor: colors.surface }]}
+            onPress={() => setMode('skin_care')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.modeTabIcon, { backgroundColor: mode === 'skin_care' ? colors.tertiaryLight : 'transparent' }]}>
+              <Ionicons name="leaf" size={22} color={mode === 'skin_care' ? colors.tertiary : colors.textTertiary} />
+            </View>
+            <Text style={[styles.modeTabTitle, { color: mode === 'skin_care' ? colors.text : colors.textTertiary }]}>Skin Care</Text>
+            <Text style={[styles.modeTabDesc, { color: mode === 'skin_care' ? colors.textSecondary : colors.textTertiary }]}>Daily routine</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.modeTab, mode === 'makeup' && { backgroundColor: colors.surface }]}
+            onPress={() => setMode('makeup')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.modeTabIcon, { backgroundColor: mode === 'makeup' ? colors.primaryLight : 'transparent' }]}>
+              <Ionicons name="color-palette" size={22} color={mode === 'makeup' ? colors.primary : colors.textTertiary} />
+            </View>
+            <Text style={[styles.modeTabTitle, { color: mode === 'makeup' ? colors.text : colors.textTertiary }]}>Makeup</Text>
+            <Text style={[styles.modeTabDesc, { color: mode === 'makeup' ? colors.textSecondary : colors.textTertiary }]}>Suggestions</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Mode Description */}
+        <View style={[styles.modeDescription, { backgroundColor: mode === 'skin_care' ? colors.tertiaryLight : colors.primaryLight, borderColor: mode === 'skin_care' ? colors.tertiary + '30' : colors.primary + '30' }]}>
+          <Ionicons name={currentConfig.icon} size={20} color={mode === 'skin_care' ? colors.tertiary : colors.primary} />
+          <Text style={[styles.modeDescText, { color: colors.text }]}>{currentConfig.subtitle}</Text>
+        </View>
+
+        {/* Image Upload */}
         <View style={styles.imageSection}>
           {imageUri ? (
             <View style={styles.imageContainer}>
@@ -126,42 +190,49 @@ export default function AnalyzeScreen() {
             </View>
           ) : (
             <View style={[styles.uploadArea, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={[styles.uploadIcon, { backgroundColor: colors.primaryLight }]}>
-                <Ionicons name="image-outline" size={48} color={colors.primary} />
+              <View style={[styles.uploadIcon, { backgroundColor: mode === 'skin_care' ? colors.tertiaryLight : colors.primaryLight }]}>
+                <Ionicons name="image-outline" size={44} color={mode === 'skin_care' ? colors.tertiary : colors.primary} />
               </View>
               <Text style={[styles.uploadTitle, { color: colors.text }]}>Upload Your Photo</Text>
-              <Text style={[styles.uploadDescription, { color: colors.textSecondary }]}>Take a selfie or upload a clear photo of your face for accurate analysis</Text>
+              <Text style={[styles.uploadDescription, { color: colors.textSecondary }]}>
+                {mode === 'skin_care' ? 'A clear photo of your face for skin analysis' : 'Scan your face with or without makeup'}
+              </Text>
             </View>
           )}
         </View>
 
+        {/* Actions */}
         {!imageUri ? (
           <View style={styles.actionButtons}>
             <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.borderLight }]} onPress={takePhoto}>
               <View style={[styles.actionButtonIcon, { backgroundColor: colors.primaryLight }]}>
-                <Ionicons name="camera" size={28} color={colors.primary} />
+                <Ionicons name="camera" size={26} color={colors.primary} />
               </View>
               <Text style={[styles.actionButtonText, { color: colors.text }]}>Take Photo</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.borderLight }]} onPress={pickImage}>
               <View style={[styles.actionButtonIcon, { backgroundColor: colors.secondaryLight }]}>
-                <Ionicons name="images" size={28} color={colors.secondary} />
+                <Ionicons name="images" size={26} color={colors.secondary} />
               </View>
               <Text style={[styles.actionButtonText, { color: colors.text }]}>Gallery</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.analyzeSection}>
-            <TouchableOpacity style={[styles.analyzeButton, { backgroundColor: colors.primary }, analyzing && styles.analyzeButtonDisabled]} onPress={analyzeImage} disabled={analyzing}>
+            <TouchableOpacity
+              style={[styles.analyzeButton, { backgroundColor: mode === 'skin_care' ? colors.tertiary : colors.primary }, analyzing && styles.analyzeButtonDisabled]}
+              onPress={analyzeImage}
+              disabled={analyzing}
+            >
               {analyzing ? (
                 <View style={styles.analyzingContent}>
                   <ActivityIndicator color="#FFF" size="small" />
-                  <Text style={styles.analyzeButtonText}>Analyzing...</Text>
+                  <Text style={styles.analyzeButtonText}>{currentConfig.analyzingText}</Text>
                 </View>
               ) : (
                 <View style={styles.analyzingContent}>
-                  <Ionicons name="sparkles" size={24} color="#FFF" />
-                  <Text style={styles.analyzeButtonText}>Analyze My Skin</Text>
+                  <Ionicons name={currentConfig.icon} size={22} color="#FFF" />
+                  <Text style={styles.analyzeButtonText}>{currentConfig.analyzeText}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -171,18 +242,21 @@ export default function AnalyzeScreen() {
           </View>
         )}
 
+        {/* Tips */}
         <View style={[styles.tipsSection, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
           <Text style={[styles.tipsTitle, { color: colors.text }]}>Tips for Best Results</Text>
-          {[
-            { icon: 'sunny-outline', text: 'Good lighting, preferably natural' },
-            { icon: 'happy-outline', text: 'Face the camera directly' },
-            { icon: 'water-outline', text: 'Clean face, no makeup if possible' },
-          ].map((tip, i) => (
+          {currentConfig.tips.map((tip, i) => (
             <View key={i} style={styles.tipItem}>
-              <Ionicons name={tip.icon as any} size={20} color={colors.primary} />
+              <Ionicons name={tip.icon as any} size={20} color={mode === 'skin_care' ? colors.tertiary : colors.primary} />
               <Text style={[styles.tipText, { color: colors.textSecondary }]}>{tip.text}</Text>
             </View>
           ))}
+        </View>
+
+        {/* Disclaimer */}
+        <View style={styles.disclaimerContainer}>
+          <Ionicons name="shield-checkmark-outline" size={14} color={colors.textTertiary} />
+          <Text style={[styles.disclaimerText, { color: colors.textTertiary }]}>{DISCLAIMER}</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -192,32 +266,48 @@ export default function AnalyzeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 100 },
-  header: { marginBottom: 24 },
-  title: { fontSize: 28, fontWeight: '700', marginBottom: 4 },
-  subtitle: { fontSize: 14 },
-  imageSection: { marginBottom: 24 },
-  uploadArea: { borderRadius: 24, padding: 40, alignItems: 'center', borderWidth: 2, borderStyle: 'dashed' },
-  uploadIcon: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  header: { marginBottom: 20 },
+  pageTitle: { fontSize: 26, fontWeight: '700', marginBottom: 4 },
+  pageSubtitle: { fontSize: 14 },
+  // Mode Tabs
+  modeTabs: { flexDirection: 'row', borderRadius: 16, padding: 6, marginBottom: 16, gap: 6 },
+  modeTab: { flex: 1, alignItems: 'center', paddingVertical: 16, borderRadius: 12 },
+  modeTabIcon: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  modeTabTitle: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  modeTabDesc: { fontSize: 11 },
+  // Mode Description
+  modeDescription: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 12, marginBottom: 20, borderWidth: 1 },
+  modeDescText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  // Image
+  imageSection: { marginBottom: 20 },
+  uploadArea: { borderRadius: 24, padding: 36, alignItems: 'center', borderWidth: 2, borderStyle: 'dashed' },
+  uploadIcon: { width: 76, height: 76, borderRadius: 38, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   uploadTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8 },
-  uploadDescription: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  uploadDescription: { fontSize: 13, textAlign: 'center', lineHeight: 19 },
   imageContainer: { position: 'relative', alignItems: 'center' },
   previewImage: { width: '100%', aspectRatio: 1, borderRadius: 24 },
   removeImageButton: { position: 'absolute', top: 12, right: 12, borderRadius: 16 },
-  actionButtons: { flexDirection: 'row', gap: 16, marginBottom: 24 },
+  // Actions
+  actionButtons: { flexDirection: 'row', gap: 14, marginBottom: 20 },
   actionButton: { flex: 1, borderRadius: 16, padding: 20, alignItems: 'center', borderWidth: 1 },
-  actionButtonIcon: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  actionButtonIcon: { width: 54, height: 54, borderRadius: 27, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   actionButtonText: { fontSize: 14, fontWeight: '600' },
-  analyzeSection: { gap: 12, marginBottom: 24 },
+  analyzeSection: { gap: 12, marginBottom: 20 },
   analyzeButton: { borderRadius: 16, padding: 18, alignItems: 'center' },
   analyzeButtonDisabled: { opacity: 0.7 },
   analyzingContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  analyzeButtonText: { fontSize: 18, fontWeight: '700', color: '#FFF' },
+  analyzeButtonText: { fontSize: 17, fontWeight: '700', color: '#FFF' },
   retakeButton: { padding: 12, alignItems: 'center' },
   retakeButtonText: { fontSize: 14, fontWeight: '600' },
-  tipsSection: { borderRadius: 16, padding: 20, borderWidth: 1 },
+  // Tips
+  tipsSection: { borderRadius: 16, padding: 20, borderWidth: 1, marginBottom: 16 },
   tipsTitle: { fontSize: 16, fontWeight: '600', marginBottom: 16 },
   tipItem: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  tipText: { fontSize: 14 },
+  tipText: { fontSize: 13 },
+  // Disclaimer
+  disclaimerContainer: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingHorizontal: 4 },
+  disclaimerText: { flex: 1, fontSize: 10, lineHeight: 15 },
+  // Camera
   cameraContainer: { flex: 1, backgroundColor: '#000' },
   camera: { flex: 1 },
   cameraOverlay: { flex: 1, justifyContent: 'space-between', padding: 20 },

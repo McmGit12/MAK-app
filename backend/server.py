@@ -69,6 +69,7 @@ class EmailLogin(BaseModel):
 class SkinAnalysisRequest(BaseModel):
     image_base64: str
     user_id: str
+    mode: str = "skin_care"  # "skin_care" or "makeup"
 
 class SkinAnalysis(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -135,14 +136,47 @@ def generate_user_id() -> str:
 # Store OTPs temporarily (in production, use Redis with expiry)
 otp_store: Dict[str, str] = {}
 
-async def analyze_skin_with_ai(image_base64: str) -> Dict[str, Any]:
-    """Use GPT-4o Vision to analyze skin from image"""
+async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Dict[str, Any]:
+    """Use GPT-4o Vision to analyze skin/makeup from image"""
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"skin-analysis-{uuid.uuid4()}",
-            system_message="""You are an expert dermatologist and makeup artist AI assistant. 
-            Analyze the provided facial image and provide detailed skin analysis.
+        if mode == "makeup":
+            system_msg = """You are an expert makeup artist and beauty consultant.
+            Analyze the provided facial image and suggest the best makeup that would suit this person.
+            Consider their skin tone, face shape, features, and current look (with or without makeup).
+            
+            You MUST respond in valid JSON format with these exact fields:
+            {
+                "skin_type": "one of: oily, dry, combination, normal, sensitive",
+                "skin_tone": "one of: fair, light, medium, tan, deep, dark",
+                "undertone": "one of: warm, cool, neutral",
+                "face_shape": "one of: oval, round, square, heart, oblong, diamond",
+                "skin_concerns": ["array of makeup-relevant observations like: uneven tone, dark circles, sparse brows, thin lips"],
+                "texture_analysis": "brief description of skin texture and how it affects makeup application",
+                "ai_recommendations": [
+                    {
+                        "category": "category name",
+                        "recommendation": "specific recommendation",
+                        "shade_range": "recommended shades",
+                        "tips": "detailed application tips",
+                        "reason": "why this suits them"
+                    }
+                ]
+            }
+            
+            Provide at least 7 recommendations covering ALL of these categories:
+            1. Foundation & Base - type and shade
+            2. Blush - type (cream/powder), color family
+            3. Lip Color - finish (matte/gloss/satin), color suggestions
+            4. Eye Makeup - eyeshadow palette, liner style, mascara type
+            5. Contouring & Highlighting - placement and products
+            6. Brow Styling - shape and fill recommendations
+            7. Hair Styling - blow dry style, texture tips that complement the face
+            
+            Be specific, creative, and consider current beauty trends."""
+            user_text = "Please analyze this face and provide detailed makeup suggestions that would best suit this person. Consider their unique features, face shape, and coloring. Return ONLY valid JSON."
+        else:
+            system_msg = """You are an expert dermatologist and skincare specialist.
+            Analyze the provided facial image and provide detailed skin analysis with skincare routine recommendations.
             
             You MUST respond in valid JSON format with these exact fields:
             {
@@ -154,24 +188,37 @@ async def analyze_skin_with_ai(image_base64: str) -> Dict[str, Any]:
                 "texture_analysis": "brief description of skin texture",
                 "ai_recommendations": [
                     {
-                        "category": "foundation/concealer/blush/lipstick/skincare",
+                        "category": "category name",
                         "recommendation": "specific product type recommendation",
-                        "shade_range": "recommended shade range",
-                        "tips": "application tips",
-                        "reason": "why this suits their skin"
+                        "shade_range": "N/A for skincare",
+                        "tips": "application tips and routine placement",
+                        "reason": "why this benefits their skin"
                     }
                 ]
             }
             
-            Provide at least 5 different recommendations covering foundation, concealer, blush, lipstick, and skincare.
-            Be specific and helpful. Consider the person's unique features."""
+            Provide at least 6 recommendations covering:
+            1. Cleanser - morning and evening
+            2. Toner/Essence
+            3. Serum - targeted treatment
+            4. Moisturizer - day and night
+            5. Sunscreen - SPF recommendation
+            6. Weekly Treatment - mask or exfoliant
+            
+            Be specific and helpful. Consider the person's unique skin needs."""
+            user_text = "Please analyze this facial image and provide a complete skin analysis with a personalized skincare routine. Return ONLY valid JSON, no other text."
+
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"skin-analysis-{uuid.uuid4()}",
+            system_message=system_msg
         ).with_model("openai", "gpt-4o")
         
         # Create image content
         image_content = ImageContent(image_base64=image_base64)
         
         user_message = UserMessage(
-            text="Please analyze this facial image and provide a complete skin analysis with makeup recommendations. Return ONLY valid JSON, no other text.",
+            text=user_text,
             file_contents=[image_content]
         )
         
@@ -406,7 +453,7 @@ async def analyze_skin(data: SkinAnalysisRequest):
         raise HTTPException(status_code=404, detail="User not found")
     
     # Perform AI analysis
-    analysis_result = await analyze_skin_with_ai(data.image_base64)
+    analysis_result = await analyze_skin_with_ai(data.image_base64, data.mode)
     
     # Create analysis record
     analysis = SkinAnalysis(
@@ -421,7 +468,9 @@ async def analyze_skin(data: SkinAnalysisRequest):
     )
     
     # Save to database (image is NOT stored - only analysis results)
-    await db.analyses.insert_one(analysis.dict())
+    analysis_dict = analysis.dict()
+    analysis_dict["mode"] = data.mode
+    await db.analyses.insert_one(analysis_dict)
     
     return SkinAnalysisResponse(
         id=analysis.id,

@@ -52,10 +52,11 @@ export const api = {
   },
 
   // Skin analysis endpoints
-  analyzeSkin: async (imageBase64: string, userId: string) => {
+  analyzeSkin: async (imageBase64: string, userId: string, mode: string = 'skin_care') => {
     const response = await apiClient.post('/analyze-skin', {
       image_base64: imageBase64,
       user_id: userId,
+      mode: mode,
     });
     return response.data;
   },

@@ -370,6 +370,10 @@ export default function HomeScreen() {
             <Ionicons name="sparkles" size={12} color={colors.primary} />
             <Text style={[styles.footerBrandText, { color: colors.textTertiary }]}>MAK v1.0</Text>
           </View>
+          <View style={styles.footerDisclaimer}>
+            <Ionicons name="shield-checkmark-outline" size={12} color={colors.textTertiary} />
+            <Text style={[styles.footerDisclaimerText, { color: colors.textTertiary }]}>We respect your privacy and do not store any personal data. Try recommendations at your own discretion.</Text>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -464,4 +468,6 @@ const styles = StyleSheet.create({
   footerText: { fontSize: 12, marginBottom: 8 },
   footerBrand: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   footerBrandText: { fontSize: 11, fontWeight: '600' },
+  footerDisclaimer: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, marginTop: 10, paddingHorizontal: 16 },
+  footerDisclaimerText: { flex: 1, fontSize: 9, lineHeight: 14, textAlign: 'center' },
 });
