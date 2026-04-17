@@ -9,46 +9,23 @@ import {
   Dimensions,
   Alert,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
+import { useTheme } from '../../src/context/ThemeContext';
 import { api } from '../../src/services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const BEAUTY_TIPS = [
-  {
-    icon: 'sunny-outline',
-    title: 'Sun Protection',
-    text: 'Always apply SPF 30+ sunscreen as the last step of your morning routine, even on cloudy days.',
-    color: '#F4A460',
-  },
-  {
-    icon: 'water-outline',
-    title: 'Hydration First',
-    text: 'Drink 8 glasses of water daily. Hydrated skin absorbs products better and glows naturally.',
-    color: '#87CEEB',
-  },
-  {
-    icon: 'moon-outline',
-    title: 'Night Routine',
-    text: 'Never sleep with makeup on. Double cleanse at night to remove all traces of the day.',
-    color: '#B19CD9',
-  },
-  {
-    icon: 'leaf-outline',
-    title: 'Natural Glow',
-    text: 'Apply a vitamin C serum in the morning to brighten your complexion and fight free radicals.',
-    color: '#90EE90',
-  },
-  {
-    icon: 'heart-outline',
-    title: 'Self Care',
-    text: 'Use a face mask once a week to deeply nourish your skin and give yourself a pampering break.',
-    color: '#FFB6C1',
-  },
+  { icon: 'sunny-outline', title: 'Sun Protection', text: 'Always apply SPF 30+ sunscreen as the last step of your morning routine, even on cloudy days.', color: '#E8A87C' },
+  { icon: 'water-outline', title: 'Hydration First', text: 'Drink 8 glasses of water daily. Hydrated skin absorbs products better and glows naturally.', color: '#7CC5B2' },
+  { icon: 'moon-outline', title: 'Night Routine', text: 'Never sleep with makeup on. Double cleanse at night to remove all traces of the day.', color: '#A98EC4' },
+  { icon: 'leaf-outline', title: 'Natural Glow', text: 'Apply a vitamin C serum in the morning to brighten your complexion and fight free radicals.', color: '#90C695' },
+  { icon: 'heart-outline', title: 'Self Care', text: 'Use a face mask once a week to deeply nourish your skin and give yourself a pampering break.', color: '#D4849A' },
 ];
 
 const BEAUTY_QUOTES = [
@@ -59,30 +36,32 @@ const BEAUTY_QUOTES = [
   { quote: "Confidence is the best makeup any woman can wear.", author: "Beauty Wisdom" },
 ];
 
-const TRENDING_CATEGORIES = [
-  { icon: 'color-fill', label: 'Dewy Skin', color: '#87CEEB' },
-  { icon: 'flower', label: 'Glass Skin', color: '#FFB6C1' },
-  { icon: 'sparkles', label: 'No-Makeup Look', color: '#D4AF37' },
-  { icon: 'brush', label: 'Bold Lips', color: '#FF6B6B' },
-  { icon: 'eye', label: 'Smoky Eyes', color: '#B19CD9' },
+const TRENDING = [
+  { icon: 'color-fill', label: 'Dewy Skin', color: '#7CC5B2' },
+  { icon: 'flower', label: 'Glass Skin', color: '#D4849A' },
+  { icon: 'sparkles', label: 'No-Makeup Look', color: '#C9946A' },
+  { icon: 'brush', label: 'Bold Lips', color: '#E85D75' },
+  { icon: 'eye', label: 'Smoky Eyes', color: '#A98EC4' },
 ];
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors, isDark, toggleTheme } = useTheme();
   const [lastAnalysis, setLastAnalysis] = useState<any>(null);
   const [analysesCount, setAnalysesCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
   const [activeTipIndex, setActiveTipIndex] = useState(0);
-  const tipScrollRef = useRef<ScrollView>(null);
+  const waveAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const todayQuote = BEAUTY_QUOTES[new Date().getDay() % BEAUTY_QUOTES.length];
 
   const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning';
-    if (hour < 17) return 'Good Afternoon';
+    const h = new Date().getHours();
+    if (h < 12) return 'Good Morning';
+    if (h < 17) return 'Good Afternoon';
     return 'Good Evening';
   };
 
@@ -93,33 +72,47 @@ export default function HomeScreen() {
   };
 
   const getDaysSinceJoined = () => {
-    if (!user?.created_at) return 0;
+    if (!user?.created_at) return 1;
     const created = new Date(user.created_at);
     const now = new Date();
     return Math.max(1, Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)));
   };
 
-  const fetchLastAnalysis = async () => {
-    if (!user?.id) return;
+  const fetchData = async () => {
+    if (!user?.id) { setPageLoading(false); return; }
     try {
       const analyses = await api.getUserAnalyses(user.id);
       setAnalysesCount(analyses.length);
-      if (analyses.length > 0) {
-        setLastAnalysis(analyses[0]);
-      }
+      if (analyses.length > 0) setLastAnalysis(analyses[0]);
     } catch (err) {
       console.log('No analyses yet');
+    } finally {
+      setPageLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchLastAnalysis();
-  }, [user]);
+  useEffect(() => { fetchData(); }, [user]);
 
+  // Wave animation
+  useEffect(() => {
+    const wave = Animated.loop(
+      Animated.sequence([
+        Animated.timing(waveAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.delay(3000),
+      ])
+    );
+    wave.start();
+    return () => wave.stop();
+  }, []);
+
+  // Pulse animation for CTA
   useEffect(() => {
     const pulse = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.05, duration: 1500, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.03, duration: 1500, useNativeDriver: true }),
         Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
       ])
     );
@@ -127,234 +120,165 @@ export default function HomeScreen() {
     return () => pulse.stop();
   }, []);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchLastAnalysis();
-    setRefreshing(false);
-  };
+  const waveRotate = waveAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '20deg'] });
 
-  const handleTipScroll = (event: any) => {
-    const index = Math.round(event.nativeEvent.contentOffset.x / (SCREEN_WIDTH - 60));
-    setActiveTipIndex(index);
+  const onRefresh = async () => { setRefreshing(true); await fetchData(); setRefreshing(false); };
+
+  const handleTipScroll = (e: any) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / (SCREEN_WIDTH - 60));
+    setActiveTipIndex(idx);
   };
 
   const handleNotifyMe = () => {
-    Alert.alert(
-      'Stay Tuned!',
-      'We\'ll notify you as soon as these exciting features are ready. Thank you for your interest!',
-      [{ text: 'Sounds Great', style: 'default' }]
-    );
+    Alert.alert('Stay Tuned!', 'We\'ll notify you as soon as these exciting features are ready!', [{ text: 'Sounds Great' }]);
   };
 
   const features = [
-    {
-      icon: 'scan-outline',
-      title: 'Skin Analysis',
-      description: 'Personalized skin assessment',
-      route: '/(tabs)/analyze',
-      accent: '#D4AF37',
-    },
-    {
-      icon: 'color-palette',
-      title: 'Makeup Match',
-      description: 'Find your perfect shades',
-      route: '/(tabs)/analyze',
-      accent: '#FFB6C1',
-    },
-    {
-      icon: 'sparkles',
-      title: 'Skincare Routine',
-      description: 'Custom daily routine',
-      route: '/(tabs)/analyze',
-      accent: '#87CEEB',
-    },
-    {
-      icon: 'trending-up',
-      title: 'Beauty Goals',
-      description: 'Track your progress',
-      route: '/(tabs)/history',
-      accent: '#90EE90',
-    },
+    { icon: 'scan-outline', title: 'Skin Analysis', desc: 'Personalized skin assessment', route: '/(tabs)/analyze', accent: colors.primary },
+    { icon: 'color-palette', title: 'Makeup Match', desc: 'Find your perfect shades', route: '/(tabs)/analyze', accent: colors.secondary },
+    { icon: 'sparkles', title: 'Skincare Routine', desc: 'Custom daily routine', route: '/(tabs)/analyze', accent: colors.tertiary },
+    { icon: 'trending-up', title: 'Beauty Goals', desc: 'Track your progress', route: '/(tabs)/history', accent: colors.accent },
   ];
 
+  if (pageLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.loadingScreen}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading your beauty dashboard...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#D4AF37"
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.greeting}>{getGreeting()},</Text>
-            <Text style={styles.userName}>{getUserName()}</Text>
+        {/* Header Row */}
+        <View style={styles.headerRow}>
+          <View style={styles.greetingRow}>
+            <View>
+              <View style={styles.greetingLine}>
+                <Text style={[styles.greeting, { color: colors.textSecondary }]}>{getGreeting()},</Text>
+                <Animated.Text style={[styles.waveEmoji, { transform: [{ rotate: waveRotate }] }]}>
+                  {'\u{1F44B}'}
+                </Animated.Text>
+              </View>
+              <Text style={[styles.userName, { color: colors.text }]}>{getUserName()}</Text>
+            </View>
           </View>
           <TouchableOpacity
-            style={styles.logoSmall}
-            onPress={() => router.push('/(tabs)/profile')}
+            style={[styles.themeToggle, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}
+            onPress={toggleTheme}
             activeOpacity={0.7}
           >
-            <Ionicons name="person" size={20} color="#D4AF37" />
+            <Ionicons name={isDark ? 'sunny' : 'moon'} size={20} color={isDark ? '#F4A460' : '#A98EC4'} />
           </TouchableOpacity>
         </View>
 
-        {/* Brand Banner */}
-        <View style={styles.brandBanner}>
-          <View style={styles.brandBannerLeft}>
-            <View style={styles.brandLogoRow}>
-              <Ionicons name="sparkles" size={20} color="#D4AF37" />
-              <Text style={styles.brandName}>MAK</Text>
-            </View>
-            <Text style={styles.brandTagline}>Your Personalized Makeup Buddy</Text>
+        {/* Centered MAK Branding */}
+        <View style={styles.brandCenter}>
+          <View style={styles.brandLogoRow}>
+            <Ionicons name="sparkles" size={18} color={colors.primary} />
+            <Text style={[styles.brandName, { color: colors.primary }]}>MAK</Text>
+            <Ionicons name="sparkles" size={18} color={colors.primary} />
           </View>
-          <View style={styles.brandDivider} />
-          <View style={styles.brandBannerRight}>
-            <Text style={styles.brandStatNumber}>{analysesCount}</Text>
-            <Text style={styles.brandStatLabel}>Analyses</Text>
-          </View>
+          <Text style={[styles.brandTagline, { color: colors.textSecondary }]}>Your Personalized Makeup Buddy</Text>
         </View>
 
-        {/* Quick Action Card */}
+        {/* Main CTA */}
         <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
           <TouchableOpacity
-            style={styles.mainCard}
+            style={[styles.mainCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
             onPress={() => router.push('/(tabs)/analyze')}
             activeOpacity={0.85}
           >
-            <View style={styles.mainCardGlow} />
-            <View style={styles.mainCardContent}>
-              <View style={styles.mainCardIcon}>
-                <Ionicons name="scan-outline" size={36} color="#D4AF37" />
-              </View>
-              <View style={styles.mainCardText}>
-                <Text style={styles.mainCardTitle}>Start Skin Analysis</Text>
-                <Text style={styles.mainCardSubtitle}>
-                  Snap a photo for personalized beauty recommendations
-                </Text>
-              </View>
-              <View style={styles.mainCardArrow}>
-                <Ionicons name="arrow-forward-circle" size={32} color="#D4AF37" />
-              </View>
+            <View style={[styles.mainCardIcon, { backgroundColor: colors.primaryLight }]}>
+              <Ionicons name="scan-outline" size={32} color={colors.primary} />
             </View>
+            <View style={styles.mainCardText}>
+              <Text style={[styles.mainCardTitle, { color: colors.text }]}>Start Skin Analysis</Text>
+              <Text style={[styles.mainCardSubtitle, { color: colors.textSecondary }]}>Snap a photo for personalized beauty recommendations</Text>
+            </View>
+            <Ionicons name="arrow-forward-circle" size={28} color={colors.primary} />
           </TouchableOpacity>
         </Animated.View>
 
         {/* Quick Stats */}
         <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <View style={[styles.statIconBg, { backgroundColor: 'rgba(212, 175, 55, 0.12)' }]}>
-              <Ionicons name="analytics" size={20} color="#D4AF37" />
+          {[
+            { icon: 'analytics', num: analysesCount, label: 'Analyses', c: colors.primary, bg: colors.primaryLight },
+            { icon: 'calendar', num: getDaysSinceJoined(), label: getDaysSinceJoined() === 1 ? 'Day' : 'Days', c: colors.secondary, bg: colors.secondaryLight },
+            { icon: 'heart', num: lastAnalysis ? 1 : 0, label: 'Profile', c: colors.tertiary, bg: colors.tertiaryLight },
+          ].map((s, i) => (
+            <View key={i} style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
+              <View style={[styles.statIconBg, { backgroundColor: s.bg }]}>
+                <Ionicons name={s.icon as any} size={18} color={s.c} />
+              </View>
+              <Text style={[styles.statNumber, { color: colors.text }]}>{s.num}</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{s.label}</Text>
             </View>
-            <Text style={styles.statNumber}>{analysesCount}</Text>
-            <Text style={styles.statLabel}>Analyses</Text>
-          </View>
-          <View style={styles.statCard}>
-            <View style={[styles.statIconBg, { backgroundColor: 'rgba(135, 206, 235, 0.12)' }]}>
-              <Ionicons name="calendar" size={20} color="#87CEEB" />
-            </View>
-            <Text style={styles.statNumber}>{getDaysSinceJoined()}</Text>
-            <Text style={styles.statLabel}>{getDaysSinceJoined() === 1 ? 'Day' : 'Days'}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <View style={[styles.statIconBg, { backgroundColor: 'rgba(255, 182, 193, 0.12)' }]}>
-              <Ionicons name="heart" size={20} color="#FFB6C1" />
-            </View>
-            <Text style={styles.statNumber}>{lastAnalysis ? '1' : '0'}</Text>
-            <Text style={styles.statLabel}>Profile</Text>
-          </View>
+          ))}
         </View>
 
-        {/* Last Analysis Summary */}
+        {/* Skin Profile */}
         {lastAnalysis && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Your Skin Profile</Text>
-              <TouchableOpacity
-                onPress={() => router.push({
-                  pathname: '/analysis-result',
-                  params: { analysisId: lastAnalysis.id }
-                })}
-              >
-                <Text style={styles.seeAllText}>View Details</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Skin Profile</Text>
+              <TouchableOpacity onPress={() => router.push({ pathname: '/analysis-result', params: { analysisId: lastAnalysis.id } })}>
+                <Text style={[styles.seeAll, { color: colors.primary }]}>View Details</Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.profileCard}>
+            <View style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
               <View style={styles.profileGrid}>
-                <View style={styles.profileGridItem}>
-                  <View style={[styles.profileItemDot, { backgroundColor: '#D4AF37' }]} />
-                  <Text style={styles.profileLabel}>Skin Type</Text>
-                  <Text style={styles.profileValue}>{lastAnalysis.skin_type}</Text>
-                </View>
-                <View style={styles.profileGridItem}>
-                  <View style={[styles.profileItemDot, { backgroundColor: '#FFB6C1' }]} />
-                  <Text style={styles.profileLabel}>Tone</Text>
-                  <Text style={styles.profileValue}>{lastAnalysis.skin_tone}</Text>
-                </View>
-                <View style={styles.profileGridItem}>
-                  <View style={[styles.profileItemDot, { backgroundColor: '#87CEEB' }]} />
-                  <Text style={styles.profileLabel}>Undertone</Text>
-                  <Text style={styles.profileValue}>{lastAnalysis.undertone}</Text>
-                </View>
-                <View style={styles.profileGridItem}>
-                  <View style={[styles.profileItemDot, { backgroundColor: '#90EE90' }]} />
-                  <Text style={styles.profileLabel}>Face Shape</Text>
-                  <Text style={styles.profileValue}>{lastAnalysis.face_shape}</Text>
-                </View>
+                {[
+                  { label: 'Skin Type', value: lastAnalysis.skin_type, c: colors.primary },
+                  { label: 'Tone', value: lastAnalysis.skin_tone, c: colors.secondary },
+                  { label: 'Undertone', value: lastAnalysis.undertone, c: colors.tertiary },
+                  { label: 'Face Shape', value: lastAnalysis.face_shape, c: colors.accent },
+                ].map((p, i) => (
+                  <View key={i} style={[styles.profileGridItem, { backgroundColor: colors.surfaceVariant }]}>
+                    <View style={[styles.profileDot, { backgroundColor: p.c }]} />
+                    <Text style={[styles.profileLabel, { color: colors.textSecondary }]}>{p.label}</Text>
+                    <Text style={[styles.profileValue, { color: colors.text }]}>{p.value}</Text>
+                  </View>
+                ))}
               </View>
             </View>
           </View>
         )}
 
-        {/* Trending Now */}
+        {/* Trending */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Trending Now</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.trendingScroll}
-          >
-            {TRENDING_CATEGORIES.map((cat, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.trendingChip}
-                activeOpacity={0.7}
-                onPress={() => router.push('/(tabs)/analyze')}
-              >
-                <View style={[styles.trendingChipIcon, { backgroundColor: `${cat.color}20` }]}>
-                  <Ionicons name={cat.icon as any} size={18} color={cat.color} />
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Trending Now</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendingScroll}>
+            {TRENDING.map((t, i) => (
+              <TouchableOpacity key={i} style={[styles.trendingChip, { backgroundColor: colors.surface, borderColor: colors.borderLight }]} activeOpacity={0.7} onPress={() => router.push('/(tabs)/analyze')}>
+                <View style={[styles.trendingChipIcon, { backgroundColor: `${t.color}20` }]}>
+                  <Ionicons name={t.icon as any} size={16} color={t.color} />
                 </View>
-                <Text style={styles.trendingChipLabel}>{cat.label}</Text>
+                <Text style={[styles.trendingChipLabel, { color: colors.text }]}>{t.label}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
 
-        {/* Features Grid */}
+        {/* Features */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Explore</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Explore</Text>
           <View style={styles.featuresGrid}>
-            {features.map((feature, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.featureCard}
-                onPress={() => router.push(feature.route as any)}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.featureIcon, { backgroundColor: `${feature.accent}15` }]}>
-                  <Ionicons name={feature.icon as any} size={24} color={feature.accent} />
+            {features.map((f, i) => (
+              <TouchableOpacity key={i} style={[styles.featureCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]} onPress={() => router.push(f.route as any)} activeOpacity={0.8}>
+                <View style={[styles.featureIcon, { backgroundColor: `${f.accent}18` }]}>
+                  <Ionicons name={f.icon as any} size={22} color={f.accent} />
                 </View>
-                <Text style={styles.featureTitle}>{feature.title}</Text>
-                <Text style={styles.featureDescription}>{feature.description}</Text>
-                <View style={styles.featureArrow}>
-                  <Ionicons name="chevron-forward" size={14} color="#666" />
-                </View>
+                <Text style={[styles.featureTitle, { color: colors.text }]}>{f.title}</Text>
+                <Text style={[styles.featureDesc, { color: colors.textSecondary }]}>{f.desc}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -363,176 +287,88 @@ export default function HomeScreen() {
         {/* Beauty Tips Carousel */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Beauty Tips</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Beauty Tips</Text>
             <View style={styles.tipDots}>
               {BEAUTY_TIPS.map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.tipDot,
-                    activeTipIndex === i && styles.tipDotActive,
-                  ]}
-                />
+                <View key={i} style={[styles.tipDot, { backgroundColor: colors.borderLight }, activeTipIndex === i && { backgroundColor: colors.primary, width: 16 }]} />
               ))}
             </View>
           </View>
-          <ScrollView
-            ref={tipScrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={handleTipScroll}
-            scrollEventThrottle={16}
-            decelerationRate="fast"
-            snapToInterval={SCREEN_WIDTH - 40}
-            contentContainerStyle={{ paddingRight: 20 }}
-          >
-            {BEAUTY_TIPS.map((tip, index) => (
-              <View key={index} style={[styles.tipCard, { width: SCREEN_WIDTH - 60 }]}>
+          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onScroll={handleTipScroll} scrollEventThrottle={16} decelerationRate="fast" snapToInterval={SCREEN_WIDTH - 40} contentContainerStyle={{ paddingRight: 20 }}>
+            {BEAUTY_TIPS.map((tip, i) => (
+              <View key={i} style={[styles.tipCard, { width: SCREEN_WIDTH - 60, backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
                 <View style={[styles.tipIconCircle, { backgroundColor: `${tip.color}20` }]}>
-                  <Ionicons name={tip.icon as any} size={24} color={tip.color} />
+                  <Ionicons name={tip.icon as any} size={22} color={tip.color} />
                 </View>
                 <View style={styles.tipContent}>
                   <Text style={[styles.tipTitle, { color: tip.color }]}>{tip.title}</Text>
-                  <Text style={styles.tipText}>{tip.text}</Text>
+                  <Text style={[styles.tipText, { color: colors.textSecondary }]}>{tip.text}</Text>
                 </View>
               </View>
             ))}
           </ScrollView>
         </View>
 
-        {/* Inspiration Quote */}
+        {/* Quote */}
         <View style={styles.section}>
-          <View style={styles.quoteCard}>
-            <Ionicons name="chatbubble-ellipses" size={20} color="#D4AF37" style={styles.quoteIcon} />
-            <Text style={styles.quoteText}>"{todayQuote.quote}"</Text>
-            <Text style={styles.quoteAuthor}>— {todayQuote.author}</Text>
+          <View style={[styles.quoteCard, { backgroundColor: colors.primaryLight, borderColor: colors.border }]}>
+            <Ionicons name="chatbubble-ellipses" size={18} color={colors.primary} />
+            <Text style={[styles.quoteText, { color: colors.text }]}>"{todayQuote.quote}"</Text>
+            <Text style={[styles.quoteAuthor, { color: colors.primary }]}>— {todayQuote.author}</Text>
           </View>
         </View>
 
-        {/* Coming Soon Section */}
+        {/* Coming Soon */}
         <View style={styles.section}>
           <View style={styles.comingSoonHeader}>
-            <View style={styles.comingSoonBadge}>
-              <Ionicons name="rocket" size={14} color="#0D0D0D" />
+            <View style={[styles.comingSoonBadge, { backgroundColor: colors.primary }]}>
+              <Ionicons name="rocket" size={13} color="#FFF" />
               <Text style={styles.comingSoonBadgeText}>COMING SOON</Text>
             </View>
-            <View style={styles.comingSoonLine} />
+            <View style={[styles.comingSoonLine, { backgroundColor: colors.border }]} />
           </View>
 
-          {/* Recent Activity Card */}
-          <View style={styles.comingSoonCard}>
-            <View style={styles.comingSoonCardInner}>
-              <View style={styles.comingSoonIconContainer}>
-                <Ionicons name="notifications" size={24} color="#D4AF37" />
+          {[
+            { icon: 'notifications', title: 'Recent Activity Notes', desc: 'Personalized notes about your beauty journey.', ic: colors.primary, bg: colors.primaryLight, items: ['Daily beauty insights', 'Progress milestones', 'Personalized reminders'] },
+            { icon: 'heart', title: 'Set Your Favorites', desc: 'Save favorite products and routines.', ic: colors.secondary, bg: colors.secondaryLight, items: ['Favorite products', 'Custom routines', 'Smart recommendations'] },
+            { icon: 'people', title: 'Beauty Community', desc: 'Connect, share tips, discover trends.', ic: colors.tertiary, bg: colors.tertiaryLight, items: ['Share beauty looks', 'Expert Q&A sessions'] },
+          ].map((card, ci) => (
+            <View key={ci} style={[styles.comingSoonCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
+              <View style={styles.comingSoonCardInner}>
+                <View style={[styles.comingSoonIconBg, { backgroundColor: card.bg }]}>
+                  <Ionicons name={card.icon as any} size={22} color={card.ic} />
+                </View>
+                <View style={styles.comingSoonContent}>
+                  <Text style={[styles.comingSoonTitle, { color: colors.text }]}>{card.title}</Text>
+                  <Text style={[styles.comingSoonDesc, { color: colors.textSecondary }]}>{card.desc}</Text>
+                </View>
               </View>
-              <View style={styles.comingSoonContent}>
-                <Text style={styles.comingSoonTitle}>Recent Activity Notes</Text>
-                <Text style={styles.comingSoonDescription}>
-                  Personalized notes about your beauty journey milestones and analysis insights.
-                </Text>
+              <View style={styles.comingSoonItems}>
+                {card.items.map((item, ii) => (
+                  <View key={ii} style={styles.comingSoonItem}>
+                    <View style={[styles.checkCircle, { backgroundColor: card.ic }]}>
+                      <Ionicons name="checkmark" size={10} color="#FFF" />
+                    </View>
+                    <Text style={[styles.comingSoonItemText, { color: colors.textSecondary }]}>{item}</Text>
+                  </View>
+                ))}
               </View>
             </View>
-            <View style={styles.comingSoonFeatures}>
-              <View style={styles.comingSoonFeatureItem}>
-                <View style={styles.comingSoonCheckCircle}>
-                  <Ionicons name="checkmark" size={10} color="#0D0D0D" />
-                </View>
-                <Text style={styles.comingSoonFeatureText}>Daily beauty insights</Text>
-              </View>
-              <View style={styles.comingSoonFeatureItem}>
-                <View style={styles.comingSoonCheckCircle}>
-                  <Ionicons name="checkmark" size={10} color="#0D0D0D" />
-                </View>
-                <Text style={styles.comingSoonFeatureText}>Progress milestones</Text>
-              </View>
-              <View style={styles.comingSoonFeatureItem}>
-                <View style={styles.comingSoonCheckCircle}>
-                  <Ionicons name="checkmark" size={10} color="#0D0D0D" />
-                </View>
-                <Text style={styles.comingSoonFeatureText}>Personalized reminders</Text>
-              </View>
-            </View>
-          </View>
+          ))}
 
-          {/* Favorites Card */}
-          <View style={styles.comingSoonCard}>
-            <View style={styles.comingSoonCardInner}>
-              <View style={[styles.comingSoonIconContainer, { backgroundColor: 'rgba(255, 182, 193, 0.15)' }]}>
-                <Ionicons name="heart" size={24} color="#FFB6C1" />
-              </View>
-              <View style={styles.comingSoonContent}>
-                <Text style={styles.comingSoonTitle}>Set Your Favorites</Text>
-                <Text style={styles.comingSoonDescription}>
-                  Save favorite products, routines, and recommendations for quick access.
-                </Text>
-              </View>
-            </View>
-            <View style={styles.comingSoonFeatures}>
-              <View style={styles.comingSoonFeatureItem}>
-                <View style={[styles.comingSoonCheckCircle, { backgroundColor: '#FFB6C1' }]}>
-                  <Ionicons name="checkmark" size={10} color="#0D0D0D" />
-                </View>
-                <Text style={styles.comingSoonFeatureText}>Favorite products collection</Text>
-              </View>
-              <View style={styles.comingSoonFeatureItem}>
-                <View style={[styles.comingSoonCheckCircle, { backgroundColor: '#FFB6C1' }]}>
-                  <Ionicons name="checkmark" size={10} color="#0D0D0D" />
-                </View>
-                <Text style={styles.comingSoonFeatureText}>Custom beauty routines</Text>
-              </View>
-              <View style={styles.comingSoonFeatureItem}>
-                <View style={[styles.comingSoonCheckCircle, { backgroundColor: '#FFB6C1' }]}>
-                  <Ionicons name="checkmark" size={10} color="#0D0D0D" />
-                </View>
-                <Text style={styles.comingSoonFeatureText}>Smart recommendations</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Community Card */}
-          <View style={styles.comingSoonCard}>
-            <View style={styles.comingSoonCardInner}>
-              <View style={[styles.comingSoonIconContainer, { backgroundColor: 'rgba(135, 206, 235, 0.15)' }]}>
-                <Ionicons name="people" size={24} color="#87CEEB" />
-              </View>
-              <View style={styles.comingSoonContent}>
-                <Text style={styles.comingSoonTitle}>Beauty Community</Text>
-                <Text style={styles.comingSoonDescription}>
-                  Connect with others, share tips, and discover new beauty trends together.
-                </Text>
-              </View>
-            </View>
-            <View style={styles.comingSoonFeatures}>
-              <View style={styles.comingSoonFeatureItem}>
-                <View style={[styles.comingSoonCheckCircle, { backgroundColor: '#87CEEB' }]}>
-                  <Ionicons name="checkmark" size={10} color="#0D0D0D" />
-                </View>
-                <Text style={styles.comingSoonFeatureText}>Share beauty looks</Text>
-              </View>
-              <View style={styles.comingSoonFeatureItem}>
-                <View style={[styles.comingSoonCheckCircle, { backgroundColor: '#87CEEB' }]}>
-                  <Ionicons name="checkmark" size={10} color="#0D0D0D" />
-                </View>
-                <Text style={styles.comingSoonFeatureText}>Expert Q&A sessions</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Notify Me Button */}
-          <TouchableOpacity style={styles.notifyButton} activeOpacity={0.8} onPress={handleNotifyMe}>
-            <Ionicons name="notifications-outline" size={20} color="#0D0D0D" />
-            <Text style={styles.notifyButtonText}>Notify Me When Available</Text>
+          <TouchableOpacity style={[styles.notifyBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8} onPress={handleNotifyMe}>
+            <Ionicons name="notifications-outline" size={18} color="#FFF" />
+            <Text style={styles.notifyBtnText}>Notify Me When Available</Text>
           </TouchableOpacity>
         </View>
 
         {/* Footer */}
         <View style={styles.footer}>
-          <View style={styles.footerDivider} />
-          <Text style={styles.footerText}>Made with love for your beauty journey</Text>
+          <View style={[styles.footerLine, { backgroundColor: colors.border }]} />
+          <Text style={[styles.footerText, { color: colors.textTertiary }]}>Made with love for your beauty journey</Text>
           <View style={styles.footerBrand}>
-            <Ionicons name="sparkles" size={14} color="#D4AF37" />
-            <Text style={styles.footerBrandText}>MAK v1.0</Text>
+            <Ionicons name="sparkles" size={12} color={colors.primary} />
+            <Text style={[styles.footerBrandText, { color: colors.textTertiary }]}>MAK v1.0</Text>
           </View>
         </View>
       </ScrollView>
@@ -541,502 +377,91 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0D0D0D',
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 110,
-  },
+  container: { flex: 1 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 110 },
+  loadingScreen: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
+  loadingText: { fontSize: 14 },
   // Header
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  headerLeft: {
-    flex: 1,
-  },
-  greeting: {
-    fontSize: 14,
-    color: '#888',
-    letterSpacing: 0.3,
-  },
-  userName: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginTop: 2,
-  },
-  logoSmall: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.3)',
-  },
-  // Brand Banner
-  brandBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A1A',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.15)',
-  },
-  brandBannerLeft: {
-    flex: 1,
-  },
-  brandLogoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  brandName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#D4AF37',
-    letterSpacing: 2,
-  },
-  brandTagline: {
-    fontSize: 11,
-    color: '#666',
-    marginTop: 2,
-  },
-  brandDivider: {
-    width: 1,
-    height: 36,
-    backgroundColor: 'rgba(212, 175, 55, 0.2)',
-    marginHorizontal: 16,
-  },
-  brandBannerRight: {
-    alignItems: 'center',
-    minWidth: 56,
-  },
-  brandStatNumber: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#D4AF37',
-  },
-  brandStatLabel: {
-    fontSize: 10,
-    color: '#888',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  // Main CTA Card
-  mainCard: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1.5,
-    borderColor: 'rgba(212, 175, 55, 0.4)',
-    marginBottom: 20,
-    overflow: 'hidden',
-  },
-  mainCardGlow: {
-    position: 'absolute',
-    top: -20,
-    right: -20,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(212, 175, 55, 0.06)',
-  },
-  mainCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  mainCardIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: 'rgba(212, 175, 55, 0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
-  mainCardText: {
-    flex: 1,
-  },
-  mainCardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  mainCardSubtitle: {
-    fontSize: 13,
-    color: '#888',
-    lineHeight: 18,
-  },
-  mainCardArrow: {
-    marginLeft: 8,
-  },
-  // Stats Row
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#1A1A1A',
-    borderRadius: 14,
-    padding: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  statIconBg: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  statLabel: {
-    fontSize: 11,
-    color: '#888',
-    marginTop: 2,
-  },
-  // Sections
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 14,
-  },
-  seeAllText: {
-    fontSize: 13,
-    color: '#D4AF37',
-    fontWeight: '600',
-    marginBottom: 14,
-  },
-  // Skin Profile
-  profileCard: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
-  },
-  profileGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  profileGridItem: {
-    width: '47%',
-    backgroundColor: 'rgba(212, 175, 55, 0.06)',
-    borderRadius: 12,
-    padding: 14,
-  },
-  profileItemDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginBottom: 8,
-  },
-  profileLabel: {
-    fontSize: 11,
-    color: '#888',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  profileValue: {
-    fontSize: 15,
-    color: '#FFFFFF',
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  greetingRow: { flex: 1 },
+  greetingLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  greeting: { fontSize: 14, letterSpacing: 0.3 },
+  waveEmoji: { fontSize: 20 },
+  userName: { fontSize: 24, fontWeight: '700', marginTop: 2 },
+  themeToggle: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  // Brand
+  brandCenter: { alignItems: 'center', marginBottom: 20 },
+  brandLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  brandName: { fontSize: 26, fontWeight: '800', letterSpacing: 3 },
+  brandTagline: { fontSize: 12, marginTop: 4 },
+  // Main CTA
+  mainCard: { flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: 18, borderWidth: 1, marginBottom: 20 },
+  mainCardIcon: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  mainCardText: { flex: 1 },
+  mainCardTitle: { fontSize: 16, fontWeight: '700', marginBottom: 3 },
+  mainCardSubtitle: { fontSize: 12, lineHeight: 17 },
+  // Stats
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
+  statCard: { flex: 1, borderRadius: 14, padding: 14, alignItems: 'center', borderWidth: 1 },
+  statIconBg: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  statNumber: { fontSize: 20, fontWeight: '700' },
+  statLabel: { fontSize: 11, marginTop: 2 },
+  // Section
+  section: { marginBottom: 24 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 14 },
+  seeAll: { fontSize: 13, fontWeight: '600', marginBottom: 14 },
+  // Profile
+  profileCard: { borderRadius: 16, padding: 14, borderWidth: 1 },
+  profileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  profileGridItem: { width: '47%', borderRadius: 12, padding: 14 },
+  profileDot: { width: 8, height: 8, borderRadius: 4, marginBottom: 8 },
+  profileLabel: { fontSize: 11, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
+  profileValue: { fontSize: 15, fontWeight: '600', textTransform: 'capitalize' },
   // Trending
-  trendingScroll: {
-    paddingBottom: 4,
-    gap: 10,
-  },
-  trendingChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A1A',
-    borderRadius: 24,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    gap: 8,
-  },
-  trendingChipIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  trendingChipLabel: {
-    fontSize: 13,
-    color: '#CCC',
-    fontWeight: '500',
-  },
+  trendingScroll: { paddingBottom: 4, gap: 10 },
+  trendingChip: { flexDirection: 'row', alignItems: 'center', borderRadius: 24, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 1, gap: 8 },
+  trendingChipIcon: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
+  trendingChipLabel: { fontSize: 13, fontWeight: '500' },
   // Features
-  featuresGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  featureCard: {
-    width: '48%',
-    backgroundColor: '#1A1A1A',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  featureIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  featureTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  featureDescription: {
-    fontSize: 12,
-    color: '#888',
-    lineHeight: 16,
-  },
-  featureArrow: {
-    position: 'absolute',
-    top: 16,
-    right: 14,
-  },
-  // Tips Carousel
-  tipDots: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 14,
-  },
-  tipDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(212, 175, 55, 0.2)',
-  },
-  tipDotActive: {
-    backgroundColor: '#D4AF37',
-    width: 18,
-  },
-  tipCard: {
-    flexDirection: 'row',
-    backgroundColor: '#1A1A1A',
-    borderRadius: 16,
-    padding: 16,
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  tipIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
-  tipContent: {
-    flex: 1,
-  },
-  tipTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  tipText: {
-    fontSize: 13,
-    color: '#999',
-    lineHeight: 19,
-  },
+  featuresGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  featureCard: { width: '48%', borderRadius: 16, padding: 16, borderWidth: 1 },
+  featureIcon: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  featureTitle: { fontSize: 14, fontWeight: '600', marginBottom: 4 },
+  featureDesc: { fontSize: 12, lineHeight: 16 },
+  // Tips
+  tipDots: { flexDirection: 'row', gap: 5, marginBottom: 14 },
+  tipDot: { width: 6, height: 6, borderRadius: 3 },
+  tipCard: { flexDirection: 'row', borderRadius: 16, padding: 16, marginRight: 12, borderWidth: 1 },
+  tipIconCircle: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  tipContent: { flex: 1 },
+  tipTitle: { fontSize: 14, fontWeight: '700', marginBottom: 6 },
+  tipText: { fontSize: 13, lineHeight: 19 },
   // Quote
-  quoteCard: {
-    backgroundColor: 'rgba(212, 175, 55, 0.06)',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.15)',
-    alignItems: 'center',
-  },
-  quoteIcon: {
-    marginBottom: 12,
-  },
-  quoteText: {
-    fontSize: 15,
-    color: '#CCC',
-    fontStyle: 'italic',
-    lineHeight: 24,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  quoteAuthor: {
-    fontSize: 12,
-    color: '#D4AF37',
-    fontWeight: '600',
-  },
+  quoteCard: { borderRadius: 16, padding: 20, borderWidth: 1, alignItems: 'center' },
+  quoteText: { fontSize: 15, fontStyle: 'italic', lineHeight: 24, textAlign: 'center', marginVertical: 8 },
+  quoteAuthor: { fontSize: 12, fontWeight: '600' },
   // Coming Soon
-  comingSoonHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    gap: 12,
-  },
-  comingSoonBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#D4AF37',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
-  },
-  comingSoonBadgeText: {
-    color: '#0D0D0D',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  comingSoonLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: 'rgba(212, 175, 55, 0.2)',
-  },
-  comingSoonCard: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  comingSoonCardInner: {
-    flexDirection: 'row',
-    marginBottom: 14,
-  },
-  comingSoonIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: 'rgba(212, 175, 55, 0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
-  comingSoonContent: {
-    flex: 1,
-  },
-  comingSoonTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  comingSoonDescription: {
-    fontSize: 13,
-    color: '#888',
-    lineHeight: 19,
-  },
-  comingSoonFeatures: {
-    gap: 8,
-    paddingLeft: 62,
-  },
-  comingSoonFeatureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  comingSoonCheckCircle: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#D4AF37',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  comingSoonFeatureText: {
-    fontSize: 12,
-    color: '#AAA',
-  },
-  // Notify Button
-  notifyButton: {
-    backgroundColor: '#D4AF37',
-    borderRadius: 14,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    marginTop: 4,
-  },
-  notifyButtonText: {
-    color: '#0D0D0D',
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  comingSoonHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
+  comingSoonBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 6 },
+  comingSoonBadgeText: { color: '#FFF', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  comingSoonLine: { flex: 1, height: 1 },
+  comingSoonCard: { borderRadius: 18, padding: 18, marginBottom: 12, borderWidth: 1 },
+  comingSoonCardInner: { flexDirection: 'row', marginBottom: 14 },
+  comingSoonIconBg: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  comingSoonContent: { flex: 1 },
+  comingSoonTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
+  comingSoonDesc: { fontSize: 12, lineHeight: 18 },
+  comingSoonItems: { gap: 8, paddingLeft: 58 },
+  comingSoonItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  checkCircle: { width: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
+  comingSoonItemText: { fontSize: 12 },
+  notifyBtn: { borderRadius: 14, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 4 },
+  notifyBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
   // Footer
-  footer: {
-    alignItems: 'center',
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  footerDivider: {
-    width: 40,
-    height: 2,
-    backgroundColor: 'rgba(212, 175, 55, 0.2)',
-    borderRadius: 1,
-    marginBottom: 16,
-  },
-  footerText: {
-    fontSize: 12,
-    color: '#555',
-    marginBottom: 8,
-  },
-  footerBrand: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  footerBrandText: {
-    fontSize: 11,
-    color: '#666',
-    fontWeight: '600',
-  },
+  footer: { alignItems: 'center', paddingTop: 8, paddingBottom: 8 },
+  footerLine: { width: 40, height: 2, borderRadius: 1, marginBottom: 16 },
+  footerText: { fontSize: 12, marginBottom: 8 },
+  footerBrand: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  footerBrandText: { fontSize: 11, fontWeight: '600' },
 });

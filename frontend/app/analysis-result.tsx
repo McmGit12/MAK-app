@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../src/context/ThemeContext';
 import { api } from '../src/services/api';
 
 interface Analysis {
@@ -42,6 +43,7 @@ interface CuratedRecommendation {
 export default function AnalysisResultScreen() {
   const router = useRouter();
   const { analysisId } = useLocalSearchParams();
+  const { colors } = useTheme();
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [curatedRecs, setCuratedRecs] = useState<CuratedRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,44 +55,29 @@ export default function AnalysisResultScreen() {
         if (analysisId) {
           const analysisData = await api.getAnalysis(analysisId as string);
           setAnalysis(analysisData);
-
-          // Fetch curated recommendations based on skin type and tone
-          const curated = await api.getCuratedRecommendations(
-            analysisData.skin_type,
-            analysisData.skin_tone
-          );
+          const curated = await api.getCuratedRecommendations(analysisData.skin_type, analysisData.skin_tone);
           setCuratedRecs(curated);
         }
-      } catch (err) {
-        console.error('Error fetching analysis:', err);
-      } finally {
-        setLoading(false);
-      }
+      } catch (err) { console.error('Error fetching analysis:', err); } finally { setLoading(false); }
     };
-
     fetchData();
   }, [analysisId]);
 
   const getCategoryIcon = (category: string): string => {
     const icons: { [key: string]: string } = {
-      foundation: 'color-fill',
-      concealer: 'brush',
-      blush: 'heart',
-      lipstick: 'color-palette',
-      skincare: 'water',
-      primer: 'layers',
-      eyeshadow: 'eye',
-      mascara: 'eye-outline',
+      foundation: 'color-fill', concealer: 'brush', blush: 'heart',
+      lipstick: 'color-palette', skincare: 'water', primer: 'layers',
+      eyeshadow: 'eye', mascara: 'eye-outline',
     };
     return icons[category.toLowerCase()] || 'sparkles';
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#D4AF37" />
-          <Text style={styles.loadingText}>Loading your results...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading your results...</Text>
         </View>
       </SafeAreaView>
     );
@@ -98,11 +85,11 @@ export default function AnalysisResultScreen() {
 
   if (!analysis) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={48} color="#FF6B6B" />
-          <Text style={styles.errorText}>Failed to load analysis</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="alert-circle" size={48} color={colors.error} />
+          <Text style={[styles.errorText, { color: colors.error }]}>Failed to load analysis</Text>
+          <TouchableOpacity style={[styles.backButton, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
             <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -111,172 +98,120 @@ export default function AnalysisResultScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { borderBottomColor: colors.borderLight }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Analysis Results</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Analysis Results</Text>
         <View style={styles.headerButton} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Skin Profile Card */}
-        <View style={styles.profileCard}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.profileHeader}>
-            <Ionicons name="sparkles" size={24} color="#D4AF37" />
-            <Text style={styles.profileTitle}>Your Skin Profile</Text>
+            <Ionicons name="sparkles" size={24} color={colors.primary} />
+            <Text style={[styles.profileTitle, { color: colors.text }]}>Your Skin Profile</Text>
           </View>
-
           <View style={styles.profileGrid}>
-            <View style={styles.profileItem}>
-              <Text style={styles.profileLabel}>Skin Type</Text>
-              <Text style={styles.profileValue}>{analysis.skin_type}</Text>
-            </View>
-            <View style={styles.profileItem}>
-              <Text style={styles.profileLabel}>Skin Tone</Text>
-              <Text style={styles.profileValue}>{analysis.skin_tone}</Text>
-            </View>
-            <View style={styles.profileItem}>
-              <Text style={styles.profileLabel}>Undertone</Text>
-              <Text style={styles.profileValue}>{analysis.undertone}</Text>
-            </View>
-            <View style={styles.profileItem}>
-              <Text style={styles.profileLabel}>Face Shape</Text>
-              <Text style={styles.profileValue}>{analysis.face_shape}</Text>
-            </View>
+            {[
+              { label: 'Skin Type', value: analysis.skin_type },
+              { label: 'Skin Tone', value: analysis.skin_tone },
+              { label: 'Undertone', value: analysis.undertone },
+              { label: 'Face Shape', value: analysis.face_shape },
+            ].map((item, i) => (
+              <View key={i} style={[styles.profileItem, { backgroundColor: colors.surfaceVariant }]}>
+                <Text style={[styles.profileLabel, { color: colors.textSecondary }]}>{item.label}</Text>
+                <Text style={[styles.profileValue, { color: colors.primary }]}>{item.value}</Text>
+              </View>
+            ))}
           </View>
-
-          {/* Skin Concerns */}
-          {analysis.skin_concerns.length > 0 && (
+          {analysis.skin_concerns && analysis.skin_concerns.length > 0 && (
             <View style={styles.concernsSection}>
-              <Text style={styles.concernsLabel}>Areas to Focus On</Text>
+              <Text style={[styles.concernsLabel, { color: colors.textSecondary }]}>Areas to Focus On</Text>
               <View style={styles.concernsTags}>
                 {analysis.skin_concerns.map((concern, index) => (
-                  <View key={index} style={styles.concernTag}>
-                    <Text style={styles.concernTagText}>{concern}</Text>
+                  <View key={index} style={[styles.concernTag, { backgroundColor: colors.error + '18' }]}>
+                    <Text style={[styles.concernTagText, { color: colors.error }]}>{concern}</Text>
                   </View>
                 ))}
               </View>
             </View>
           )}
-
-          {/* Texture Analysis */}
           {analysis.texture_analysis && (
-            <View style={styles.textureSection}>
-              <Text style={styles.textureLabel}>Texture Analysis</Text>
-              <Text style={styles.textureText}>{analysis.texture_analysis}</Text>
+            <View style={[styles.textureSection, { borderTopColor: colors.borderLight }]}>
+              <Text style={[styles.textureLabel, { color: colors.textSecondary }]}>Texture Analysis</Text>
+              <Text style={[styles.textureText, { color: colors.text }]}>{analysis.texture_analysis}</Text>
             </View>
           )}
         </View>
 
-        {/* Recommendations Tabs */}
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'ai' && styles.activeTab]}
-            onPress={() => setActiveTab('ai')}
-          >
-            <Ionicons
-              name="sparkles"
-              size={18}
-              color={activeTab === 'ai' ? '#D4AF37' : '#888'}
-            />
-            <Text style={[styles.tabText, activeTab === 'ai' && styles.activeTabText]}>
-              For You
-            </Text>
+        <View style={[styles.tabContainer, { backgroundColor: colors.surfaceVariant }]}>
+          <TouchableOpacity style={[styles.tab, activeTab === 'ai' && { backgroundColor: colors.primaryLight }]} onPress={() => setActiveTab('ai')}>
+            <Ionicons name="sparkles" size={18} color={activeTab === 'ai' ? colors.primary : colors.textTertiary} />
+            <Text style={[styles.tabText, { color: activeTab === 'ai' ? colors.primary : colors.textTertiary }]}>For You</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'curated' && styles.activeTab]}
-            onPress={() => setActiveTab('curated')}
-          >
-            <Ionicons
-              name="star"
-              size={18}
-              color={activeTab === 'curated' ? '#D4AF37' : '#888'}
-            />
-            <Text style={[styles.tabText, activeTab === 'curated' && styles.activeTabText]}>
-              Expert Picks
-            </Text>
+          <TouchableOpacity style={[styles.tab, activeTab === 'curated' && { backgroundColor: colors.primaryLight }]} onPress={() => setActiveTab('curated')}>
+            <Ionicons name="star" size={18} color={activeTab === 'curated' ? colors.primary : colors.textTertiary} />
+            <Text style={[styles.tabText, { color: activeTab === 'curated' ? colors.primary : colors.textTertiary }]}>Expert Picks</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Recommendations List */}
         <View style={styles.recommendationsSection}>
           {activeTab === 'ai' ? (
             analysis.ai_recommendations.map((rec, index) => (
-              <View key={index} style={styles.recommendationCard}>
+              <View key={index} style={[styles.recommendationCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
                 <View style={styles.recHeader}>
-                  <View style={styles.recIcon}>
-                    <Ionicons
-                      name={getCategoryIcon(rec.category) as any}
-                      size={22}
-                      color="#D4AF37"
-                    />
+                  <View style={[styles.recIcon, { backgroundColor: colors.primaryLight }]}>
+                    <Ionicons name={getCategoryIcon(rec.category) as any} size={22} color={colors.primary} />
                   </View>
                   <View style={styles.recHeaderText}>
-                    <Text style={styles.recCategory}>{rec.category}</Text>
-                    <Text style={styles.recTitle}>{rec.recommendation}</Text>
+                    <Text style={[styles.recCategory, { color: colors.primary }]}>{rec.category}</Text>
+                    <Text style={[styles.recTitle, { color: colors.text }]}>{rec.recommendation}</Text>
                   </View>
                 </View>
-
                 {rec.shade_range && rec.shade_range !== 'N/A' && (
                   <View style={styles.recDetail}>
-                    <Text style={styles.recDetailLabel}>Shade Range</Text>
-                    <Text style={styles.recDetailValue}>{rec.shade_range}</Text>
+                    <Text style={[styles.recDetailLabel, { color: colors.textSecondary }]}>Shade Range</Text>
+                    <Text style={[styles.recDetailValue, { color: colors.text }]}>{rec.shade_range}</Text>
                   </View>
                 )}
-
                 <View style={styles.recDetail}>
-                  <Text style={styles.recDetailLabel}>Application Tips</Text>
-                  <Text style={styles.recDetailValue}>{rec.tips}</Text>
+                  <Text style={[styles.recDetailLabel, { color: colors.textSecondary }]}>Application Tips</Text>
+                  <Text style={[styles.recDetailValue, { color: colors.text }]}>{rec.tips}</Text>
                 </View>
-
-                <View style={styles.recReason}>
-                  <Ionicons name="bulb" size={16} color="#D4AF37" />
-                  <Text style={styles.recReasonText}>{rec.reason}</Text>
+                <View style={[styles.recReason, { backgroundColor: colors.primaryLight }]}>
+                  <Ionicons name="bulb" size={16} color={colors.primary} />
+                  <Text style={[styles.recReasonText, { color: colors.primary }]}>{rec.reason}</Text>
                 </View>
               </View>
             ))
           ) : (
             curatedRecs.map((rec, index) => (
-              <View key={index} style={styles.recommendationCard}>
+              <View key={index} style={[styles.recommendationCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
                 <View style={styles.recHeader}>
-                  <View style={styles.recIcon}>
-                    <Ionicons
-                      name={getCategoryIcon(rec.category) as any}
-                      size={22}
-                      color="#D4AF37"
-                    />
+                  <View style={[styles.recIcon, { backgroundColor: colors.primaryLight }]}>
+                    <Ionicons name={getCategoryIcon(rec.category) as any} size={22} color={colors.primary} />
                   </View>
                   <View style={styles.recHeaderText}>
-                    <Text style={styles.recCategory}>{rec.category}</Text>
-                    <Text style={styles.recTitle}>{rec.product_name}</Text>
+                    <Text style={[styles.recCategory, { color: colors.primary }]}>{rec.category}</Text>
+                    <Text style={[styles.recTitle, { color: colors.text }]}>{rec.product_name}</Text>
                   </View>
                 </View>
-
                 <View style={styles.recDetail}>
-                  <Text style={styles.recDetailValue}>{rec.description}</Text>
+                  <Text style={[styles.recDetailValue, { color: colors.text }]}>{rec.description}</Text>
                 </View>
-
-                <View style={styles.recReason}>
-                  <Ionicons name="bulb" size={16} color="#D4AF37" />
-                  <Text style={styles.recReasonText}>{rec.tips}</Text>
+                <View style={[styles.recReason, { backgroundColor: colors.primaryLight }]}>
+                  <Ionicons name="bulb" size={16} color={colors.primary} />
+                  <Text style={[styles.recReasonText, { color: colors.primary }]}>{rec.tips}</Text>
                 </View>
               </View>
             ))
           )}
         </View>
 
-        {/* Action Button */}
-        <TouchableOpacity
-          style={styles.newAnalysisButton}
-          onPress={() => router.push('/(tabs)/analyze')}
-        >
-          <Ionicons name="camera" size={22} color="#0D0D0D" />
+        <TouchableOpacity style={[styles.newAnalysisButton, { backgroundColor: colors.primary }]} onPress={() => router.push('/(tabs)/analyze')}>
+          <Ionicons name="camera" size={22} color="#FFF" />
           <Text style={styles.newAnalysisText}>New Analysis</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -285,251 +220,47 @@ export default function AnalysisResultScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0D0D0D',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(212, 175, 55, 0.1)',
-  },
-  headerButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    color: '#888',
-    fontSize: 14,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  errorText: {
-    color: '#FF6B6B',
-    fontSize: 16,
-  },
-  backButton: {
-    backgroundColor: '#D4AF37',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  backButtonText: {
-    color: '#0D0D0D',
-    fontWeight: '600',
-  },
-  profileCard: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.3)',
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 20,
-  },
-  profileTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  profileGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 20,
-  },
-  profileItem: {
-    width: '47%',
-    backgroundColor: 'rgba(212, 175, 55, 0.08)',
-    borderRadius: 12,
-    padding: 14,
-  },
-  profileLabel: {
-    fontSize: 11,
-    color: '#888',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-  },
-  profileValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#D4AF37',
-    textTransform: 'capitalize',
-  },
-  concernsSection: {
-    marginBottom: 16,
-  },
-  concernsLabel: {
-    fontSize: 13,
-    color: '#888',
-    marginBottom: 10,
-  },
-  concernsTags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  concernTag: {
-    backgroundColor: 'rgba(255, 107, 107, 0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  concernTagText: {
-    fontSize: 12,
-    color: '#FF9999',
-    textTransform: 'capitalize',
-  },
-  textureSection: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(212, 175, 55, 0.1)',
-    paddingTop: 16,
-  },
-  textureLabel: {
-    fontSize: 13,
-    color: '#888',
-    marginBottom: 8,
-  },
-  textureText: {
-    fontSize: 14,
-    color: '#CCC',
-    lineHeight: 22,
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#1A1A1A',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 20,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  activeTab: {
-    backgroundColor: 'rgba(212, 175, 55, 0.15)',
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#888',
-  },
-  activeTabText: {
-    color: '#D4AF37',
-  },
-  recommendationsSection: {
-    gap: 16,
-    marginBottom: 24,
-  },
-  recommendationCard: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.15)',
-  },
-  recHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  recIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  recHeaderText: {
-    flex: 1,
-  },
-  recCategory: {
-    fontSize: 11,
-    color: '#D4AF37',
-    textTransform: 'uppercase',
-    marginBottom: 2,
-  },
-  recTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  recDetail: {
-    marginBottom: 12,
-  },
-  recDetailLabel: {
-    fontSize: 11,
-    color: '#888',
-    marginBottom: 4,
-  },
-  recDetailValue: {
-    fontSize: 13,
-    color: '#CCC',
-    lineHeight: 20,
-  },
-  recReason: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: 'rgba(212, 175, 55, 0.08)',
-    padding: 12,
-    borderRadius: 10,
-  },
-  recReasonText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#D4AF37',
-    lineHeight: 18,
-  },
-  newAnalysisButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#D4AF37',
-    borderRadius: 14,
-    padding: 16,
-  },
-  newAnalysisText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0D0D0D',
-  },
+  container: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  headerButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '600' },
+  scrollContent: { padding: 20, paddingBottom: 40 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
+  loadingText: { fontSize: 14 },
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
+  errorText: { fontSize: 16 },
+  backButton: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
+  backButtonText: { color: '#FFF', fontWeight: '600' },
+  profileCard: { borderRadius: 20, padding: 20, marginBottom: 20, borderWidth: 1 },
+  profileHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
+  profileTitle: { fontSize: 18, fontWeight: '700' },
+  profileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
+  profileItem: { width: '47%', borderRadius: 12, padding: 14 },
+  profileLabel: { fontSize: 11, marginBottom: 4, textTransform: 'uppercase' },
+  profileValue: { fontSize: 16, fontWeight: '600', textTransform: 'capitalize' },
+  concernsSection: { marginBottom: 16 },
+  concernsLabel: { fontSize: 13, marginBottom: 10 },
+  concernsTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  concernTag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+  concernTagText: { fontSize: 12, textTransform: 'capitalize' },
+  textureSection: { borderTopWidth: 1, paddingTop: 16 },
+  textureLabel: { fontSize: 13, marginBottom: 8 },
+  textureText: { fontSize: 14, lineHeight: 22 },
+  tabContainer: { flexDirection: 'row', borderRadius: 12, padding: 4, marginBottom: 20 },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 10 },
+  tabText: { fontSize: 13, fontWeight: '600' },
+  recommendationsSection: { gap: 16, marginBottom: 24 },
+  recommendationCard: { borderRadius: 16, padding: 18, borderWidth: 1 },
+  recHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  recIcon: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  recHeaderText: { flex: 1 },
+  recCategory: { fontSize: 11, textTransform: 'uppercase', marginBottom: 2 },
+  recTitle: { fontSize: 15, fontWeight: '600' },
+  recDetail: { marginBottom: 12 },
+  recDetailLabel: { fontSize: 11, marginBottom: 4 },
+  recDetailValue: { fontSize: 13, lineHeight: 20 },
+  recReason: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 12, borderRadius: 10 },
+  recReasonText: { flex: 1, fontSize: 12, lineHeight: 18 },
+  newAnalysisButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 14, padding: 16 },
+  newAnalysisText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
 });
