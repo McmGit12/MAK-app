@@ -97,4 +97,16 @@ export const api = {
     const response = await apiClient.get(`/feedback/${userId}`);
     return response.data;
   },
+
+  // Travel Style
+  getTravelStyle: async (country: string, month: string, occasion: string, userId?: string) => {
+    const response = await apiClient.post('/travel-style', { country, month, occasion, user_id: userId });
+    return response.data;
+  },
+
+  // Chatbot
+  chatWithMak: async (message: string, sessionId?: string) => {
+    const response = await apiClient.post('/chat', { message, session_id: sessionId });
+    return response.data;
+  },
 };

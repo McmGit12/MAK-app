@@ -3,12 +3,14 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '../../src/context/ThemeContext';
+import AskMakChatbot from '../../src/components/AskMakChatbot';
 
 export default function TabsLayout() {
   const { colors } = useTheme();
 
   return (
-    <Tabs
+    <View style={{ flex: 1 }}>
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -64,6 +66,8 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+      <AskMakChatbot />
+    </View>
   );
 }
 

@@ -697,6 +697,144 @@ async def get_user_feedback(user_id: str):
 
 # ==================== UTILITY ENDPOINTS ====================
 
+# ==================== TRAVEL STYLE ENDPOINT ====================
+
+class TravelStyleRequest(BaseModel):
+    country: str
+    month: str
+    occasion: str
+    user_id: Optional[str] = None
+
+@api_router.post("/travel-style")
+async def get_travel_style(data: TravelStyleRequest):
+    """Get makeup and dressing suggestions based on travel destination"""
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"travel-style-{uuid.uuid4()}",
+            system_message="""You are an expert fashion stylist and makeup artist who specializes in travel and occasion styling.
+            Given a destination country, time of year, and occasion, provide detailed makeup and dressing recommendations.
+            Consider the local weather, culture, dress codes, and trends.
+            
+            You MUST respond in valid JSON format:
+            {
+                "destination_info": "Brief about weather and culture at that time",
+                "outfit_suggestions": [
+                    {"category": "category name", "suggestion": "detailed suggestion", "tips": "styling tips"}
+                ],
+                "makeup_look": [
+                    {"category": "category name", "suggestion": "detailed suggestion", "tips": "application tips"}
+                ],
+                "accessories": ["list of recommended accessories"],
+                "dos_and_donts": {"dos": ["do items"], "donts": ["dont items"]},
+                "overall_vibe": "brief description of the recommended overall look"
+            }
+            
+            Provide at least 4 outfit suggestions and 5 makeup recommendations.
+            Categories for outfits: Daywear, Evening, Formal, Casual, Footwear
+            Categories for makeup: Base, Eyes, Lips, Blush, Overall Look
+            Be specific, trendy, and culturally sensitive."""
+        ).with_model("openai", "gpt-4o")
+        
+        user_message = UserMessage(
+            text=f"I'm travelling to {data.country} in {data.month} for a {data.occasion}. Please suggest what I should wear and how I should do my makeup. Consider the weather, local culture, and the occasion. Return ONLY valid JSON."
+        )
+        
+        response = await chat.send_message(user_message)
+        
+        import json
+        clean = response.strip()
+        if clean.startswith("```json"): clean = clean[7:]
+        if clean.startswith("```"): clean = clean[3:]
+        if clean.endswith("```"): clean = clean[:-3]
+        result = json.loads(clean.strip())
+        return result
+        
+    except Exception as e:
+        logger.error(f"Travel style error: {str(e)}")
+        return {
+            "destination_info": f"Planning for {data.country} in {data.month} for {data.occasion}",
+            "outfit_suggestions": [
+                {"category": "Daywear", "suggestion": "Comfortable smart-casual outfit", "tips": "Layer for versatility"},
+                {"category": "Evening", "suggestion": "Elegant dinner outfit", "tips": "Choose wrinkle-resistant fabrics for travel"},
+            ],
+            "makeup_look": [
+                {"category": "Base", "suggestion": "Lightweight foundation with SPF", "tips": "Travel-friendly multi-use products"},
+                {"category": "Lips", "suggestion": "Long-lasting lip color", "tips": "Choose a versatile shade that works day to night"},
+            ],
+            "accessories": ["Statement earrings", "Versatile scarf", "Comfortable shoes"],
+            "dos_and_donts": {"dos": ["Research local dress codes", "Pack versatile pieces"], "donts": ["Overpack", "Wear inappropriate clothing for local culture"]},
+            "overall_vibe": "Chic and comfortable travel style"
+        }
+
+# ==================== CHATBOT ENDPOINT ====================
+
+class ChatMessage(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+
+# Store chat sessions in memory (simple approach)
+chat_sessions: Dict[str, LlmChat] = {}
+
+@api_router.post("/chat")
+async def chat_with_mak(data: ChatMessage):
+    """Ask MAK chatbot - beauty and makeup assistant"""
+    import re
+    
+    # Input validation
+    msg = data.message.strip()
+    if not msg or len(msg) < 2:
+        return {"response": "Please type a question about beauty or makeup!", "session_id": data.session_id}
+    if len(msg) > 500:
+        return {"response": "Please keep your question shorter (under 500 characters).", "session_id": data.session_id}
+    
+    # Block scripts/HTML
+    if re.search(r'<[^>]+>|javascript:|<script|onclick|onerror', msg, re.IGNORECASE):
+        return {"response": "Please ask a valid beauty or makeup question.", "session_id": data.session_id}
+    
+    # Block excessive emojis (more than 5)
+    emoji_pattern = re.compile("[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF\U00002702-\U000027B0\U0001F900-\U0001F9FF\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002600-\U000026FF]", flags=re.UNICODE)
+    emoji_count = len(emoji_pattern.findall(msg))
+    if emoji_count > 5:
+        return {"response": "Too many emojis! Please type your question in words.", "session_id": data.session_id}
+    
+    # Block cuss words (basic list)
+    bad_words = ['fuck', 'shit', 'damn', 'ass', 'bitch', 'bastard', 'dick', 'crap', 'piss', 'hell', 'cunt', 'wtf', 'stfu', 'lmao']
+    msg_lower = msg.lower()
+    if any(w in msg_lower for w in bad_words):
+        return {"response": "Let's keep our conversation positive and beauty-focused! How can I help with your beauty routine?", "session_id": data.session_id}
+    
+    try:
+        session_id = data.session_id or str(uuid.uuid4())
+        
+        if session_id not in chat_sessions:
+            chat_sessions[session_id] = LlmChat(
+                api_key=EMERGENT_LLM_KEY,
+                session_id=session_id,
+                system_message="""You are MAK, a friendly and knowledgeable beauty assistant. 
+                You help users with makeup tips, skincare routines, product recommendations, 
+                beauty trends, and styling advice. Keep responses concise (2-3 sentences max),
+                warm, and helpful. Use simple language. If asked about non-beauty topics, 
+                gently redirect to beauty/makeup topics. Never provide medical advice.
+                You speak English only."""
+            ).with_model("openai", "gpt-4o")
+        
+        chat = chat_sessions[session_id]
+        user_msg = UserMessage(text=msg)
+        response = await chat.send_message(user_msg)
+        
+        # Limit sessions in memory (cleanup old ones)
+        if len(chat_sessions) > 100:
+            oldest = list(chat_sessions.keys())[:50]
+            for k in oldest:
+                del chat_sessions[k]
+        
+        return {"response": response, "session_id": session_id}
+        
+    except Exception as e:
+        logger.error(f"Chat error: {str(e)}")
+        return {"response": "I'm having trouble right now. Please try again in a moment!", "session_id": data.session_id}
+
 @api_router.get("/")
 async def root():
     return {"message": "ComplexionFit API", "version": "1.0.0"}
