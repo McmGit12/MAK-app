@@ -1,9 +1,9 @@
 import React from 'react';
-import { Stack } from 'expo-router';
+import { Stack, Redirect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet } from 'react-native';
-import { AuthProvider } from '../src/context/AuthContext';
+import { StyleSheet, ActivityIndicator, View } from 'react-native';
+import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { ThemeProvider, useTheme } from '../src/context/ThemeContext';
 
 function InnerLayout() {
@@ -23,6 +23,7 @@ function InnerLayout() {
         <Stack.Screen name="set-name" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="analysis-result" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
       </Stack>
     </>
   );

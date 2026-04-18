@@ -279,6 +279,8 @@ export default function AnalyzeScreen() {
             {(() => {
               const missing = [];
               if (!selectedCountry) missing.push('Country');
+              if (!selectedState) missing.push('State');
+              if (!selectedCity) missing.push('City');
               if (!selectedMonth) missing.push('Month');
               if (!selectedOccasion) missing.push('Occasion');
               const canSubmit = missing.length === 0;

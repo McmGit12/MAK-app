@@ -1,12 +1,19 @@
-import React from 'react';
-import { Tabs } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Tabs, useRouter, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '../../src/context/ThemeContext';
+import { useAuth } from '../../src/context/AuthContext';
 import AskMakChatbot from '../../src/components/AskMakChatbot';
 
 export default function TabsLayout() {
   const { colors } = useTheme();
+  const { user, loading } = useAuth();
+
+  // Redirect to login if not authenticated
+  if (!loading && !user) {
+    return <Redirect href="/" />;
+  }
 
   return (
     <View style={{ flex: 1 }}>
