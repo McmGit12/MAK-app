@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -13,8 +13,14 @@ const sanitize = (text: string) => text.replace(/<[^>]*>|javascript:|on\w+=/gi, 
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const { colors } = useTheme();
+
+  useEffect(() => {
+    if (user) {
+      router.replace('/(tabs)');
+    }
+  }, [user]);
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -43,10 +49,11 @@ export default function LoginScreen() {
     try {
       const res = await api.passwordLogin(email.trim().toLowerCase(), password);
       await login(res);
-      router.replace('/(tabs)');
+      // useProtectedRoute hook auto-navigates when user state updates
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Incorrect password. Please try again.');
-    } finally { setLoading(false); }
+      setLoading(false);
+    }
   };
 
   const handleRegister = async () => {
@@ -58,10 +65,11 @@ export default function LoginScreen() {
     try {
       const res = await api.register(email.trim().toLowerCase(), n, password);
       await login(res);
-      router.replace('/(tabs)');
+      // useProtectedRoute hook auto-navigates when user state updates
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Registration failed. Please try again.');
-    } finally { setLoading(false); }
+      setLoading(false);
+    }
   };
 
   const goBack = () => {
