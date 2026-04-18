@@ -42,7 +42,8 @@ export default function LoginScreen() {
     setLoading(true); setError('');
     try {
       const res = await api.passwordLogin(email.trim().toLowerCase(), password);
-      login(res);
+      await login(res);
+      router.replace('/(tabs)');
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Incorrect password. Please try again.');
     } finally { setLoading(false); }
@@ -56,7 +57,8 @@ export default function LoginScreen() {
     setLoading(true); setError('');
     try {
       const res = await api.register(email.trim().toLowerCase(), n, password);
-      login(res);
+      await login(res);
+      router.replace('/(tabs)');
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Registration failed. Please try again.');
     } finally { setLoading(false); }
