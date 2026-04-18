@@ -53,7 +53,9 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  useEffect(() => { if (user) router.replace('/(tabs)'); }, [user]);
+  useEffect(() => {
+    // Root layout handles auth-based navigation
+  }, [user]);
 
   const filtered = COUNTRY_CODES.filter(c => c.name.toLowerCase().includes(countrySearch.toLowerCase()) || c.code.includes(countrySearch));
 
@@ -76,7 +78,7 @@ export default function LoginScreen() {
     try {
       const res = await api.passwordLogin(email.trim().toLowerCase(), password);
       login(res);
-      router.replace('/(tabs)');
+      // Root layout auto-navigates to tabs when user is set
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Incorrect password. Please try again.');
     } finally { setLoading(false); }
@@ -91,7 +93,7 @@ export default function LoginScreen() {
     try {
       const res = await api.register(email.trim().toLowerCase(), n, password, phone ? `${countryCode.code}${phone}` : undefined, countryCode.code);
       login(res);
-      router.replace('/(tabs)');
+      // Root layout auto-navigates
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Registration failed. Please try again.');
     } finally { setLoading(false); }
@@ -114,13 +116,14 @@ export default function LoginScreen() {
     try {
       const res = await api.verifyOtp(`${countryCode.code}${phone}`, otp);
       login(res);
-      if (!res.display_name) router.replace('/set-name'); else router.replace('/(tabs)');
+      if (!res.display_name) router.replace('/set-name');
+      // Root layout auto-navigates for authenticated users
     } catch (err: any) { setError(err?.response?.data?.detail || 'Invalid OTP.'); } finally { setLoading(false); }
   };
 
   const handleGuest = async () => {
     setLoading(true); setError('');
-    try { const res = await api.guestLogin(); login(res); router.replace('/(tabs)'); }
+    try { const res = await api.guestLogin(); login(res); }
     catch (err: any) { setError('Guest login failed. Please try again.'); } finally { setLoading(false); }
   };
 
