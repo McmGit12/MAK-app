@@ -134,23 +134,33 @@ export default function AnalyzeScreen() {
   return (
     <SafeAreaView style={[s.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={[s.pageTitle, { color: colors.text }]}>Choose Your Analysis</Text>
-        <Text style={[s.pageSub, { color: colors.textSecondary }]}>What would you like to know?</Text>
+        <View style={s.headerRow}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)')} style={s.backBtn}>
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
+          </TouchableOpacity>
+          <View>
+            <Text style={[s.pageTitle, { color: colors.text }]}>Choose Your Analysis</Text>
+            <Text style={[s.pageSub, { color: colors.textSecondary }]}>What would you like to know?</Text>
+          </View>
+        </View>
 
         {/* 3 Mode Tabs */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabScroll} contentContainerStyle={s.tabScrollContent}>
+        <View style={[s.tabContainer, { backgroundColor: colors.surfaceVariant }]}>
           {([
             { key: 'skin_care' as Mode, icon: 'leaf', label: 'Skin Care', sub: 'Daily routine' },
             { key: 'makeup' as Mode, icon: 'color-palette', label: 'Makeup', sub: 'Blush, lip, eye' },
             { key: 'travel' as Mode, icon: 'airplane', label: 'Travel Style', sub: 'Destination look' },
-          ]).map(t => (
-            <TouchableOpacity key={t.key} style={[s.modeTab, { backgroundColor: mode === t.key ? colors.surface : 'transparent', borderColor: mode === t.key ? colors.border : 'transparent' }]} onPress={() => { setMode(t.key); setTravelResult(null); }} activeOpacity={0.7}>
-              <Ionicons name={t.icon as any} size={20} color={mode === t.key ? colors.primary : colors.textTertiary} />
-              <Text style={[s.modeTabLabel, { color: mode === t.key ? colors.text : colors.textTertiary }]}>{t.label}</Text>
-              <Text style={[s.modeTabSub, { color: mode === t.key ? colors.textSecondary : colors.textTertiary }]}>{t.sub}</Text>
-            </TouchableOpacity>
+          ]).map((t, idx) => (
+            <React.Fragment key={t.key}>
+              {idx > 0 && <View style={[s.tabDivider, { backgroundColor: colors.border }]} />}
+              <TouchableOpacity style={[s.modeTab, mode === t.key && { backgroundColor: colors.surface }]} onPress={() => { setMode(t.key); setTravelResult(null); }} activeOpacity={0.7}>
+                <Ionicons name={t.icon as any} size={22} color={mode === t.key ? colors.primary : colors.textTertiary} />
+                <Text style={[s.modeTabLabel, { color: mode === t.key ? colors.text : colors.textTertiary }]}>{t.label}</Text>
+                <Text style={[s.modeTabSub, { color: mode === t.key ? colors.textSecondary : colors.textTertiary }]}>{t.sub}</Text>
+              </TouchableOpacity>
+            </React.Fragment>
           ))}
-        </ScrollView>
+        </View>
 
         {/* SKIN CARE / MAKEUP MODES */}
         {(mode === 'skin_care' || mode === 'makeup') && (
@@ -266,12 +276,29 @@ export default function AnalyzeScreen() {
             </View>
 
             {/* Get Suggestions Button */}
-            <TouchableOpacity style={[s.analyzeBtn, { backgroundColor: colors.accent, marginTop: 16 }, travelLoading && { opacity: 0.7 }]} onPress={getTravelSuggestions} disabled={travelLoading}>
-              <View style={s.analyzeBtnInner}>
-                {travelLoading ? <ActivityIndicator color="#FFF" size="small" /> : <Ionicons name="sparkles" size={20} color="#FFF" />}
-                <Text style={s.analyzeBtnText}>{travelLoading ? 'Getting your look...' : 'Style Me!'}</Text>
-              </View>
-            </TouchableOpacity>
+            {(() => {
+              const missing = [];
+              if (!selectedCountry) missing.push('Country');
+              if (!selectedMonth) missing.push('Month');
+              if (!selectedOccasion) missing.push('Occasion');
+              const canSubmit = missing.length === 0;
+              return (
+                <>
+                  {missing.length > 0 && (
+                    <View style={s.helperRow}>
+                      <Ionicons name="information-circle" size={14} color={colors.error} />
+                      <Text style={[s.helperText, { color: colors.error }]}>Please select: {missing.join(', ')}</Text>
+                    </View>
+                  )}
+                  <TouchableOpacity style={[s.analyzeBtn, { backgroundColor: colors.accent, marginTop: 8, opacity: canSubmit ? 1 : 0.4 }]} onPress={getTravelSuggestions} disabled={!canSubmit || travelLoading}>
+                    <View style={s.analyzeBtnInner}>
+                      {travelLoading ? <ActivityIndicator color="#FFF" size="small" /> : <Ionicons name="sparkles" size={20} color="#FFF" />}
+                      <Text style={s.analyzeBtnText}>{travelLoading ? 'Getting your look...' : 'Style Me!'}</Text>
+                    </View>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
 
             {/* Travel Results */}
             {travelResult && (
@@ -397,12 +424,14 @@ const s = StyleSheet.create({
   scroll: { padding: 20, paddingBottom: 110 },
   pageTitle: { fontSize: 24, fontWeight: '700', marginBottom: 4 },
   pageSub: { fontSize: 14, marginBottom: 16 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
+  backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   // Tabs
-  tabScroll: { marginBottom: 16 },
-  tabScrollContent: { gap: 8 },
-  modeTab: { alignItems: 'center', paddingVertical: 14, paddingHorizontal: 18, borderRadius: 14, borderWidth: 1, minWidth: 105 },
-  modeTabLabel: { fontSize: 13, fontWeight: '700', marginTop: 6 },
-  modeTabSub: { fontSize: 10, marginTop: 2 },
+  tabContainer: { flexDirection: 'row', borderRadius: 16, padding: 4, marginBottom: 16, overflow: 'hidden' },
+  tabDivider: { width: 1, marginVertical: 8 },
+  modeTab: { flex: 1, alignItems: 'center', paddingVertical: 14, paddingHorizontal: 6, borderRadius: 12 },
+  modeTabLabel: { fontSize: 13, fontWeight: '800', marginTop: 6, textAlign: 'center' },
+  modeTabSub: { fontSize: 10, marginTop: 2, textAlign: 'center' },
   // Info Banner
   infoBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: 12, marginBottom: 18, borderWidth: 1 },
   infoBannerText: { flex: 1, fontSize: 13, lineHeight: 19 },
@@ -435,6 +464,9 @@ const s = StyleSheet.create({
   occasionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   occasionChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 24, borderWidth: 1 },
   occasionText: { fontSize: 12, fontWeight: '500' },
+  // Helper
+  helperRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
+  helperText: { fontSize: 12, fontWeight: '500' },
   // Travel Results
   travelResults: { borderRadius: 16, padding: 18, marginTop: 20, borderWidth: 1 },
   travelResultTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },

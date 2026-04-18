@@ -258,7 +258,7 @@ export default function HomeScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Trending Now</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendingScroll}>
             {TRENDING.map((t, i) => (
-              <TouchableOpacity key={i} style={[styles.trendingChip, { backgroundColor: colors.surface, borderColor: colors.borderLight }]} activeOpacity={0.7} onPress={() => router.push('/(tabs)/analyze')}>
+              <TouchableOpacity key={i} style={[styles.trendingChip, { backgroundColor: colors.surface, borderColor: colors.borderLight }]} activeOpacity={0.7} onPress={() => router.push({ pathname: '/(tabs)/analyze', params: { trendMode: 'makeup', trendLabel: t.label } })}>
                 <View style={[styles.trendingChipIcon, { backgroundColor: `${t.color}20` }]}>
                   <Ionicons name={t.icon as any} size={16} color={t.color} />
                 </View>

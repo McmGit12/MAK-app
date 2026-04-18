@@ -95,7 +95,12 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={[st.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={st.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={[st.title, { color: colors.text }]}>Profile</Text>
+        <View style={st.headerRow}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)')} style={st.backBtn}>
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[st.title, { color: colors.text }]}>Profile</Text>
+        </View>
 
         {/* User Card */}
         <View style={[st.userCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
@@ -205,6 +210,8 @@ const st = StyleSheet.create({
   container: { flex: 1 },
   scroll: { padding: 20, paddingBottom: 120 },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 20 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
+  backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   userCard: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 18, marginBottom: 20, borderWidth: 1 },
   avatar: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   userInfo: { flex: 1 },

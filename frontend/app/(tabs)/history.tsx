@@ -118,10 +118,17 @@ export default function HistoryScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Analysis History</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          {analyses.length} {analyses.length === 1 ? 'analysis' : 'analyses'}
-        </Text>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)')} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
+          </TouchableOpacity>
+          <View>
+            <Text style={[styles.title, { color: colors.text }]}>Analysis History</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              {analyses.length} {analyses.length === 1 ? 'analysis' : 'analyses'}
+            </Text>
+          </View>
+        </View>
       </View>
       {analyses.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -151,6 +158,8 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { padding: 20, paddingBottom: 16 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 4 },
   subtitle: { fontSize: 14 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },

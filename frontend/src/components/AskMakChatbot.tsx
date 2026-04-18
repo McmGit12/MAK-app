@@ -185,13 +185,15 @@ export default function AskMakChatbot() {
       {/* FAB Button */}
       <Animated.View style={[styles.fabContainer, { transform: [{ scale: isOpen ? 1 : bounceAnim }] }]}>
         <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={toggleChat} activeOpacity={0.8}>
-          <Ionicons name={isOpen ? 'close' : 'chatbubble-ellipses'} size={24} color="#FFF" />
+          {isOpen ? (
+            <Ionicons name="close" size={24} color="#FFF" />
+          ) : (
+            <View style={styles.fabInner}>
+              <Ionicons name="chatbubble-ellipses" size={20} color="#FFF" />
+              <Text style={styles.fabText}>Ask MAK</Text>
+            </View>
+          )}
         </TouchableOpacity>
-        {!isOpen && (
-          <View style={[styles.fabLabel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.fabLabelText, { color: colors.text }]}>Ask MAK</Text>
-          </View>
-        )}
       </Animated.View>
     </>
   );
@@ -200,9 +202,9 @@ export default function AskMakChatbot() {
 const styles = StyleSheet.create({
   // FAB
   fabContainer: { position: 'absolute', bottom: 90, right: 16, alignItems: 'flex-end', zIndex: 998 },
-  fab: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', elevation: 6 },
-  fabLabel: { position: 'absolute', right: 64, top: 14, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1 },
-  fabLabelText: { fontSize: 12, fontWeight: '600' },
+  fab: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 6 },
+  fabInner: { alignItems: 'center', gap: 1 },
+  fabText: { color: '#FFF', fontSize: 8, fontWeight: '700', letterSpacing: 0.5 },
   // Chat Window
   chatWindow: { position: 'absolute', bottom: 155, right: 16, left: 16, height: 440, borderRadius: 20, borderWidth: 1, overflow: 'hidden', zIndex: 999, elevation: 10 },
   chatHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
