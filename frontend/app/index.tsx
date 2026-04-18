@@ -330,8 +330,8 @@ const st = StyleSheet.create({
   errText: { flex: 1, fontSize: 13 },
   privacy: { fontSize: 11, textAlign: 'center', marginTop: 20 },
   // Modal
-  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
-  modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '70%' },
+  modalOverlay: { flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 60 },
+  modalContent: { borderRadius: 20, padding: 20, flex: 1, maxHeight: '100%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   modalTitle: { fontSize: 18, fontWeight: '700' },
   searchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10, borderWidth: 1 },
