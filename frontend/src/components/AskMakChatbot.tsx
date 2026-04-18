@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   TextInput,
   FlatList,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
   Animated,
@@ -22,6 +23,14 @@ interface Message {
   isUser: boolean;
   timestamp: Date;
 }
+
+const QUICK_PILLS = [
+  'Suggest some makeup options',
+  'Best skincare routine for me',
+  'How to style up for a date?',
+  'Top beauty trends right now',
+  'Tips for glowing skin',
+];
 
 export default function AskMakChatbot() {
   const { colors } = useTheme();
@@ -138,6 +147,20 @@ export default function AskMakChatbot() {
               </View>
             )}
 
+            {/* Quick Pills - show when only welcome message */}
+            {messages.length <= 1 && !sending && (
+              <View style={styles.pillsContainer}>
+                <Text style={[styles.pillsTitle, { color: colors.textSecondary }]}>Try asking:</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScroll}>
+                  {QUICK_PILLS.map((pill, i) => (
+                    <TouchableOpacity key={i} style={[styles.pill, { backgroundColor: colors.primaryLight, borderColor: colors.primary + '30' }]} onPress={() => { setInput(pill); }}>
+                      <Text style={[styles.pillText, { color: colors.primary }]}>{pill}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
             {/* Input */}
             <View style={[styles.inputRow, { backgroundColor: colors.surface, borderTopColor: colors.borderLight }]}>
               <TextInput
@@ -203,4 +226,10 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 10, paddingVertical: 8, borderTopWidth: 1, gap: 8 },
   chatInput: { flex: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 14, maxHeight: 80 },
   sendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  // Pills
+  pillsContainer: { paddingHorizontal: 12, paddingBottom: 8 },
+  pillsTitle: { fontSize: 11, marginBottom: 8 },
+  pillsScroll: { gap: 8 },
+  pill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  pillText: { fontSize: 12, fontWeight: '500' },
 });

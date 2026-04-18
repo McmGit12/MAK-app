@@ -13,6 +13,7 @@ import hashlib
 import random
 import string
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+import bcrypt
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -323,6 +324,88 @@ async def get_install_stats():
     )
 
 # ==================== AUTH ENDPOINTS ====================
+
+class RegisterRequest(BaseModel):
+    email: str
+    name: str
+    password: str
+    phone: Optional[str] = None
+    country_code: Optional[str] = None
+
+class CheckEmailRequest(BaseModel):
+    email: str
+
+class PasswordLoginRequest(BaseModel):
+    email: str
+    password: str
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode(), hashed.encode())
+
+@api_router.post("/auth/check-email")
+async def check_email(data: CheckEmailRequest):
+    """Check if email is registered"""
+    import re
+    email = data.email.strip().lower()
+    if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+        raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+    user_hash = hash_identifier(email)
+    existing = await db.users.find_one({"user_hash": user_hash, "login_method": "email"})
+    return {"exists": existing is not None}
+
+@api_router.post("/auth/register", response_model=UserResponse)
+async def register_user(data: RegisterRequest):
+    """Create a new account"""
+    import re
+    email = data.email.strip().lower()
+    if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+        raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+    if not data.name or len(data.name.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Name must be at least 2 characters.")
+    if len(data.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+    if re.search(r'<[^>]+>|javascript:|<script', data.password, re.IGNORECASE):
+        raise HTTPException(status_code=400, detail="Invalid characters in password.")
+    if re.search(r'<[^>]+>|javascript:|<script', data.name, re.IGNORECASE):
+        raise HTTPException(status_code=400, detail="Invalid characters in name.")
+    
+    user_hash = hash_identifier(email)
+    existing = await db.users.find_one({"user_hash": user_hash, "login_method": "email"})
+    if existing:
+        raise HTTPException(status_code=400, detail="An account with this email already exists. Please sign in.")
+    
+    user_id = generate_user_id()
+    new_user = {
+        "id": user_id,
+        "user_hash": user_hash,
+        "login_method": "email",
+        "display_name": data.name.strip(),
+        "password_hash": hash_password(data.password),
+        "phone": data.phone,
+        "country_code": data.country_code,
+        "created_at": datetime.utcnow()
+    }
+    await db.users.insert_one(new_user)
+    return UserResponse(id=user_id, user_hash=user_hash, login_method="email", display_name=data.name.strip(), created_at=new_user["created_at"])
+
+@api_router.post("/auth/password-login", response_model=UserResponse)
+async def password_login(data: PasswordLoginRequest):
+    """Sign in with email and password"""
+    email = data.email.strip().lower()
+    user_hash = hash_identifier(email)
+    user = await db.users.find_one({"user_hash": user_hash, "login_method": "email"})
+    if not user:
+        raise HTTPException(status_code=400, detail="No account found with this email.")
+    
+    stored_hash = user.get("password_hash")
+    if stored_hash:
+        if not verify_password(data.password, stored_hash):
+            raise HTTPException(status_code=400, detail="Incorrect password. Please try again.")
+    
+    return UserResponse(id=user["id"], user_hash=user["user_hash"], login_method="email", display_name=user.get("display_name"), created_at=user["created_at"])
 
 @api_router.post("/auth/guest-login", response_model=UserResponse)
 async def guest_login():

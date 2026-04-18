@@ -73,8 +73,9 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   analyzeButton: {
     width: 56,

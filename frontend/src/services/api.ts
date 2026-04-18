@@ -23,6 +23,21 @@ export const api = {
   },
 
   // Auth endpoints
+  checkEmail: async (email: string) => {
+    const response = await apiClient.post('/auth/check-email', { email });
+    return response.data;
+  },
+
+  register: async (email: string, name: string, password: string, phone?: string, countryCode?: string) => {
+    const response = await apiClient.post('/auth/register', { email, name, password, phone, country_code: countryCode });
+    return response.data;
+  },
+
+  passwordLogin: async (email: string, password: string) => {
+    const response = await apiClient.post('/auth/password-login', { email, password });
+    return response.data;
+  },
+
   emailLogin: async (email: string) => {
     const response = await apiClient.post('/auth/email-login', { email });
     return response.data;
