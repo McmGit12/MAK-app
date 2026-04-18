@@ -1,0 +1,128 @@
+{
+  "summary": {
+    "total": 13,
+    "passed": 13,
+    "failed": 0,
+    "success_rate": 100.0
+  },
+  "results": [
+    {
+      "test": "Check Email (New)",
+      "status_code": 200,
+      "expected_code": 200,
+      "passed": true,
+      "response_snippet": "{'exists': False}",
+      "details": "exists should be false, got: False",
+      "timestamp": "2026-04-18T21:09:50.606101"
+    },
+    {
+      "test": "Register User",
+      "status_code": 200,
+      "expected_code": 200,
+      "passed": true,
+      "response_snippet": "{'id': '5b40aaa3-864f-4094-aba7-26c9f785778d', 'user_hash': 'eef7431f4f19235a', 'login_method': 'email', 'display_name': 'E2E Tester', 'created_at': '2026-04-18T21:09:50.955931'}",
+      "details": "Should return user with display_name",
+      "timestamp": "2026-04-18T21:09:50.975144"
+    },
+    {
+      "test": "Check Email (Existing)",
+      "status_code": 200,
+      "expected_code": 200,
+      "passed": true,
+      "response_snippet": "{'exists': True}",
+      "details": "exists should be true, got: True",
+      "timestamp": "2026-04-18T21:09:51.132699"
+    },
+    {
+      "test": "Password Login (Correct)",
+      "status_code": 200,
+      "expected_code": 200,
+      "passed": true,
+      "response_snippet": "{'id': '5b40aaa3-864f-4094-aba7-26c9f785778d', 'user_hash': 'eef7431f4f19235a', 'login_method': 'email', 'display_name': 'E2E Tester', 'created_at': '2026-04-18T21:09:50.955000'}",
+      "details": "Should succeed with user data",
+      "timestamp": "2026-04-18T21:09:51.499860"
+    },
+    {
+      "test": "Password Login (Wrong)",
+      "status_code": 400,
+      "expected_code": 400,
+      "passed": true,
+      "response_snippet": "{'detail': 'Incorrect password. Please try again.'}",
+      "details": "Should return 400 for wrong password",
+      "timestamp": "2026-04-18T21:09:51.828551"
+    },
+    {
+      "test": "Register Duplicate",
+      "status_code": 400,
+      "expected_code": 400,
+      "passed": true,
+      "response_snippet": "{'detail': 'An account with this email already exists. Please sign in.'}",
+      "details": "Should return 400 for duplicate email",
+      "timestamp": "2026-04-18T21:09:51.951190"
+    },
+    {
+      "test": "Register Invalid Data",
+      "status_code": 400,
+      "expected_code": 400,
+      "passed": true,
+      "response_snippet": "{'detail': 'Please enter a valid email address.'}",
+      "details": "Should fail validation for bad email/short password",
+      "timestamp": "2026-04-18T21:09:52.054896"
+    },
+    {
+      "test": "Travel Style",
+      "status_code": 200,
+      "expected_code": 200,
+      "passed": true,
+      "response_snippet": "{'destination_info': 'In December, Paris is chilly with temperatures ranging from 2\u00b0C to 8\u00b0C (36\u00b0F to 46\u00b0F). It can be quite damp with occasional rain showers, so dressing for warmth while maintaining",
+      "details": "Should return JSON with destination_info",
+      "timestamp": "2026-04-18T21:09:59.179859"
+    },
+    {
+      "test": "Chat Beauty Question",
+      "status_code": 200,
+      "expected_code": 200,
+      "passed": true,
+      "response_snippet": "{'response': \"Hey gorgeous! For warm undertones, you might love lipsticks with shades of warm reds, oranges, terracottas, and chocolatey browns. They really complement your skin's natural warmth beaut",
+      "details": "Should return beauty response",
+      "timestamp": "2026-04-18T21:10:00.170873"
+    },
+    {
+      "test": "Chat Security Test",
+      "status_code": 200,
+      "expected_code": "200/400",
+      "passed": true,
+      "response_snippet": "{'response': 'Please ask a valid beauty or makeup question.', 'session_id': None}",
+      "details": "Should block script injection",
+      "timestamp": "2026-04-18T21:10:00.291189"
+    },
+    {
+      "test": "Health Check",
+      "status_code": 200,
+      "expected_code": 200,
+      "passed": true,
+      "response_snippet": "{'status': 'healthy', 'timestamp': '2026-04-18T21:10:00.417228'}",
+      "details": "Should return healthy status",
+      "timestamp": "2026-04-18T21:10:00.437003"
+    },
+    {
+      "test": "Guest Login (Deprecated)",
+      "status_code": 200,
+      "expected_code": "Any",
+      "passed": true,
+      "response_snippet": "{'id': '5076688a-2502-4664-b0d3-ffcf203f9ab8', 'user_hash': 'guest_5076688a', 'login_method': 'guest', 'display_name': 'Guest', 'created_at': '2026-04-18T21:10:00.526192'}",
+      "details": "Guest login feature should be removed from UI",
+      "timestamp": "2026-04-18T21:10:00.544135"
+    },
+    {
+      "test": "OTP Request (Deprecated)",
+      "status_code": 200,
+      "expected_code": "Any",
+      "passed": true,
+      "response_snippet": "{'message': 'OTP sent successfully', 'demo_otp': '489261'}",
+      "details": "OTP login feature should be removed from UI",
+      "timestamp": "2026-04-18T21:10:00.656652"
+    }
+  ],
+  "timestamp": "2026-04-18T21:10:00.657312"
+}
