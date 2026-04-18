@@ -9,6 +9,11 @@ interface User {
   created_at: string;
 }
 
+interface StoredSession {
+  user: User;
+  loginTimestamp: number;
+}
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
@@ -19,24 +24,33 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const USER_STORAGE_KEY = '@mak_user';
+const USER_STORAGE_KEY = '@mak_session';
+const SESSION_DURATION_MS = 48 * 60 * 60 * 1000; // 48 hours
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadUser();
+    loadSession();
   }, []);
 
-  const loadUser = async () => {
+  const loadSession = async () => {
     try {
-      const storedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+      const stored = await AsyncStorage.getItem(USER_STORAGE_KEY);
+      if (stored) {
+        const session: StoredSession = JSON.parse(stored);
+        const elapsed = Date.now() - session.loginTimestamp;
+        if (elapsed < SESSION_DURATION_MS) {
+          setUser(session.user);
+        } else {
+          // Session expired
+          await AsyncStorage.removeItem(USER_STORAGE_KEY);
+          console.log('Session expired after 48 hours');
+        }
       }
     } catch (error) {
-      console.error('Error loading user:', error);
+      console.error('Error loading session:', error);
     } finally {
       setLoading(false);
     }
@@ -44,10 +58,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (userData: User) => {
     try {
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+      const session: StoredSession = {
+        user: userData,
+        loginTimestamp: Date.now(),
+      };
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session));
       setUser(userData);
     } catch (error) {
-      console.error('Error saving user:', error);
+      console.error('Error saving session:', error);
     }
   };
 
@@ -56,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await AsyncStorage.removeItem(USER_STORAGE_KEY);
       setUser(null);
     } catch (error) {
-      console.error('Error removing user:', error);
+      console.error('Error removing session:', error);
     }
   };
 
@@ -64,7 +82,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     try {
       const updatedUser = { ...user, display_name: displayName };
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
+      const stored = await AsyncStorage.getItem(USER_STORAGE_KEY);
+      let loginTimestamp = Date.now();
+      if (stored) {
+        const session: StoredSession = JSON.parse(stored);
+        loginTimestamp = session.loginTimestamp;
+      }
+      const session: StoredSession = { user: updatedUser, loginTimestamp };
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session));
       setUser(updatedUser);
     } catch (error) {
       console.error('Error updating user name:', error);

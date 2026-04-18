@@ -28,8 +28,8 @@ export const api = {
     return response.data;
   },
 
-  register: async (email: string, name: string, password: string, phone?: string, countryCode?: string) => {
-    const response = await apiClient.post('/auth/register', { email, name, password, phone, country_code: countryCode });
+  register: async (email: string, name: string, password: string) => {
+    const response = await apiClient.post('/auth/register', { email, name, password });
     return response.data;
   },
 
@@ -38,31 +38,11 @@ export const api = {
     return response.data;
   },
 
-  emailLogin: async (email: string) => {
-    const response = await apiClient.post('/auth/email-login', { email });
-    return response.data;
-  },
-
-  guestLogin: async () => {
-    const response = await apiClient.post('/auth/guest-login');
-    return response.data;
-  },
-
   updateDisplayName: async (userId: string, displayName: string) => {
     const response = await apiClient.put('/auth/update-name', {
       user_id: userId,
       display_name: displayName,
     });
-    return response.data;
-  },
-
-  requestOtp: async (phone: string) => {
-    const response = await apiClient.post('/auth/request-otp', { phone });
-    return response.data;
-  },
-
-  verifyOtp: async (phone: string, otp: string) => {
-    const response = await apiClient.post('/auth/verify-otp', { phone, otp });
     return response.data;
   },
 
