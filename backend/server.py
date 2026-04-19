@@ -14,13 +14,25 @@ import random
 import string
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 import bcrypt
+import asyncio
+import time
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
+# MongoDB connection with PRODUCTION-READY pooling
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(
+    mongo_url,
+    maxPoolSize=50,              # Max connections in pool
+    minPoolSize=5,               # Keep 5 connections warm
+    connectTimeoutMS=5000,       # 5s to establish connection
+    serverSelectionTimeoutMS=5000,  # 5s to find a server
+    socketTimeoutMS=30000,       # 30s for operations
+    maxIdleTimeMS=60000,         # Close idle connections after 60s
+    retryWrites=True,            # Auto-retry failed writes
+    retryReads=True,             # Auto-retry failed reads
+)
 db = client[os.environ.get('DB_NAME', 'complexionfit_db')]
 
 # Emergent LLM Key
@@ -38,6 +50,36 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# ==================== RETRY HELPER ====================
+
+async def retry_async(func, max_retries=2, delay=1.0):
+    """Retry an async function with exponential backoff"""
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            return await func()
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries:
+                logger.warning(f"Retry {attempt + 1}/{max_retries} after error: {str(e)[:100]}")
+                await asyncio.sleep(delay * (attempt + 1))
+            else:
+                raise last_error
+
+async def llm_with_timeout(coro, timeout_seconds=30):
+    """Run an LLM call with a hard timeout"""
+    try:
+        return await asyncio.wait_for(coro, timeout=timeout_seconds)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="The analysis is taking longer than expected. Please try again.")
+
+async def db_with_timeout(coro, timeout_seconds=10):
+    """Run a DB operation with a hard timeout"""
+    try:
+        return await asyncio.wait_for(coro, timeout=timeout_seconds)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Service is temporarily slow. Please try again in a moment.")
 
 # ==================== MODELS ====================
 
@@ -233,7 +275,7 @@ async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Di
             file_contents=[image_content]
         )
         
-        response = await chat.send_message(user_message)
+        response = await llm_with_timeout(chat.send_message(user_message), timeout_seconds=35)
         logger.info(f"AI Response received: {response[:200]}...")
         
         # Parse JSON response
@@ -363,7 +405,7 @@ async def check_email(data: CheckEmailRequest):
     if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
         raise HTTPException(status_code=400, detail="Please enter a valid email address.")
     user_hash = hash_identifier(email)
-    existing = await db.users.find_one({"user_hash": user_hash, "login_method": "email"})
+    existing = await db_with_timeout(db.users.find_one({"user_hash": user_hash, "login_method": "email"}))
     return {"exists": existing is not None}
 
 @api_router.post("/auth/register", response_model=UserResponse)
@@ -889,7 +931,7 @@ async def get_travel_style(data: TravelStyleRequest):
             text=f"I'm travelling to {data.country} in {data.month} for a {data.occasion}. Give me specific outfit and makeup recommendations for THIS exact location, considering the typical weather there in {data.month}, local cultural expectations, and the occasion. Be specific to this destination - don't give generic advice. Return ONLY valid JSON."
         )
         
-        response = await chat.send_message(user_message)
+        response = await llm_with_timeout(chat.send_message(user_message), timeout_seconds=35)
         
         import json
         clean = response.strip()
@@ -976,7 +1018,7 @@ async def chat_with_mak(data: ChatMessage):
         
         chat = chat_sessions[session_id]
         user_msg = UserMessage(text=msg)
-        response = await chat.send_message(user_msg)
+        response = await llm_with_timeout(chat.send_message(user_msg), timeout_seconds=20)
         
         # Limit sessions in memory (cleanup old ones)
         if len(chat_sessions) > 100:
@@ -996,7 +1038,20 @@ async def root():
 
 @api_router.get("/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    """Health check with MongoDB connectivity verification"""
+    mongo_ok = False
+    try:
+        result = await asyncio.wait_for(db.command("ping"), timeout=3)
+        mongo_ok = result.get("ok") == 1.0
+    except Exception:
+        mongo_ok = False
+    
+    status = "healthy" if mongo_ok else "degraded"
+    return {
+        "status": status,
+        "timestamp": datetime.utcnow().isoformat(),
+        "mongodb": "connected" if mongo_ok else "disconnected",
+    }
 
 # Include the router in the main app
 app.include_router(api_router)
