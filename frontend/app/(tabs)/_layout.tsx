@@ -1,12 +1,29 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, ActivityIndicator } from 'react-native';
 import { useTheme } from '../../src/context/ThemeContext';
+import { useAuth } from '../../src/context/AuthContext';
 import AskMakChatbot from '../../src/components/AskMakChatbot';
+import LoginScreen from '../index';
 
 export default function TabsLayout() {
   const { colors } = useTheme();
+  const { user, loading } = useAuth();
+
+  // Show loading while checking auth
+  if (loading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  // If not logged in, show login screen directly (no navigation needed)
+  if (!user) {
+    return <LoginScreen />;
+  }
 
   return (
     <View style={{ flex: 1 }}>
@@ -72,6 +89,7 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   tabLabel: {
     fontSize: 12,
     fontWeight: '800',

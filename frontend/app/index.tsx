@@ -49,11 +49,11 @@ export default function LoginScreen() {
     try {
       const res = await api.passwordLogin(email.trim().toLowerCase(), password);
       await login(res);
-      // useProtectedRoute hook auto-navigates when user state updates
+      // Navigate explicitly after successful login
+      setTimeout(() => router.replace('/(tabs)'), 100);
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Incorrect password. Please try again.');
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const handleRegister = async () => {
@@ -65,11 +65,11 @@ export default function LoginScreen() {
     try {
       const res = await api.register(email.trim().toLowerCase(), n, password);
       await login(res);
-      // useProtectedRoute hook auto-navigates when user state updates
+      // Navigate explicitly after successful registration
+      setTimeout(() => router.replace('/(tabs)'), 100);
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Registration failed. Please try again.');
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const goBack = () => {

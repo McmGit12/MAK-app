@@ -47,12 +47,10 @@ export default function ProfileScreen() {
     setLoggingOut(true);
     try {
       await logout();
-      // Root layout auto-switches to login screen when user is null
+      // Tabs layout will detect user is null and show login screen
     } catch (err) {
       console.error('Logout error:', err);
-    } finally {
       setLoggingOut(false);
-      setShowLogoutConfirm(false);
     }
   };
 
