@@ -416,6 +416,35 @@ async def password_login(data: PasswordLoginRequest):
     
     return UserResponse(id=user["id"], user_hash=user["user_hash"], login_method="email", display_name=user.get("display_name"), created_at=user["created_at"])
 
+class ChangePasswordRequest(BaseModel):
+    user_id: str
+    current_password: str
+    new_password: str
+
+@api_router.post("/auth/change-password")
+async def change_password(data: ChangePasswordRequest):
+    """Change user password"""
+    import re
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters.")
+    if re.search(r'<[^>]+>|javascript:|<script', data.new_password, re.IGNORECASE):
+        raise HTTPException(status_code=400, detail="Invalid characters in password.")
+    if data.current_password == data.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from current password.")
+    
+    user = await db.users.find_one({"id": data.user_id})
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found.")
+    
+    stored_hash = user.get("password_hash")
+    if stored_hash:
+        if not verify_password(data.current_password, stored_hash):
+            raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    
+    new_hash = hash_password(data.new_password)
+    await db.users.update_one({"id": data.user_id}, {"$set": {"password_hash": new_hash}})
+    return {"message": "Password updated successfully."}
+
 @api_router.post("/auth/guest-login", response_model=UserResponse)
 async def guest_login():
     """Create a guest user without email or phone"""

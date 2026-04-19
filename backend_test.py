@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Comprehensive Backend Testing for MAK App
-Tests auth flow changes (guest/phone login removal) and core features
+Backend Test Script for MAK App Password Change Flow
+Tests the complete password change functionality as requested
 """
 
 import requests
@@ -9,293 +9,202 @@ import json
 import sys
 from datetime import datetime
 
-# Backend URL from environment
-BACKEND_URL = "https://complexion-fit.preview.emergentagent.com/api"
+# Use the production URL from frontend/.env
+BASE_URL = "https://complexion-fit.preview.emergentagent.com/api"
 
-class MAKBackendTester:
-    def __init__(self):
-        self.results = []
-        self.passed = 0
-        self.failed = 0
-        
-    def log_result(self, test_name, status_code, expected_code, response_data, passed, details=""):
-        """Log test result"""
-        result = {
-            "test": test_name,
-            "status_code": status_code,
-            "expected_code": expected_code,
-            "passed": passed,
-            "response_snippet": str(response_data)[:200] if response_data else "No response",
-            "details": details,
-            "timestamp": datetime.now().isoformat()
-        }
-        self.results.append(result)
-        
-        if passed:
-            self.passed += 1
-            print(f"✅ {test_name}: {status_code} (Expected: {expected_code})")
+def log_test(test_name, status, details=""):
+    """Log test results with timestamp"""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    status_symbol = "✅" if status == "PASS" else "❌"
+    print(f"[{timestamp}] {status_symbol} {test_name}")
+    if details:
+        print(f"    {details}")
+    print()
+
+def test_password_change_flow():
+    """Test the complete password change flow"""
+    print("=" * 60)
+    print("TESTING PASSWORD CHANGE FLOW")
+    print("=" * 60)
+    
+    test_results = []
+    user_id = None
+    
+    # Test 1: Register a test user
+    print("1. REGISTERING TEST USER")
+    register_data = {
+        "email": "pw-test@mak.com",
+        "name": "PW Tester",
+        "password": "oldpass123"
+    }
+    
+    try:
+        response = requests.post(f"{BASE_URL}/auth/register", json=register_data, timeout=10)
+        if response.status_code == 200:
+            user_data = response.json()
+            user_id = user_data.get("id")
+            log_test("Register test user", "PASS", f"User ID: {user_id}")
+            test_results.append(("Register test user", "PASS", response.status_code))
         else:
-            self.failed += 1
-            print(f"❌ {test_name}: {status_code} (Expected: {expected_code}) - {details}")
-            
-        if response_data:
-            print(f"   Response: {str(response_data)[:150]}...")
-        print()
-        
-    def test_auth_flow(self):
-        """Test the complete auth flow as specified in review request"""
-        print("=== TESTING AUTH FLOW (Email Only) ===\n")
-        
-        test_email = "e2etest@mak.com"
-        test_name = "E2E Tester"
-        test_password = "secure123"
-        wrong_password = "wrongpass"
-        
-        # 1. Check email (should not exist initially)
-        print("1. Checking if email exists (should be false)...")
-        try:
-            response = requests.post(f"{BACKEND_URL}/auth/check-email", 
-                                   json={"email": test_email},
-                                   timeout=10)
-            data = response.json()
-            passed = response.status_code == 200 and data.get("exists") == False
-            self.log_result("Check Email (New)", response.status_code, 200, data, passed,
-                          f"exists should be false, got: {data.get('exists')}")
-        except Exception as e:
-            self.log_result("Check Email (New)", 0, 200, None, False, f"Exception: {str(e)}")
-            
-        # 2. Register new user
-        print("2. Registering new user...")
-        try:
-            response = requests.post(f"{BACKEND_URL}/auth/register",
-                                   json={
-                                       "email": test_email,
-                                       "name": test_name,
-                                       "password": test_password
-                                   },
-                                   timeout=10)
-            data = response.json()
-            passed = response.status_code == 200 and "display_name" in data
-            self.log_result("Register User", response.status_code, 200, data, passed,
-                          f"Should return user with display_name")
-        except Exception as e:
-            self.log_result("Register User", 0, 200, None, False, f"Exception: {str(e)}")
-            
-        # 3. Check email again (should exist now)
-        print("3. Checking if email exists (should be true now)...")
-        try:
-            response = requests.post(f"{BACKEND_URL}/auth/check-email",
-                                   json={"email": test_email},
-                                   timeout=10)
-            data = response.json()
-            passed = response.status_code == 200 and data.get("exists") == True
-            self.log_result("Check Email (Existing)", response.status_code, 200, data, passed,
-                          f"exists should be true, got: {data.get('exists')}")
-        except Exception as e:
-            self.log_result("Check Email (Existing)", 0, 200, None, False, f"Exception: {str(e)}")
-            
-        # 4. Password login (correct password)
-        print("4. Testing password login with correct credentials...")
-        try:
-            response = requests.post(f"{BACKEND_URL}/auth/password-login",
-                                   json={
-                                       "email": test_email,
-                                       "password": test_password
-                                   },
-                                   timeout=10)
-            data = response.json()
-            passed = response.status_code == 200 and "id" in data
-            self.log_result("Password Login (Correct)", response.status_code, 200, data, passed,
-                          "Should succeed with user data")
-        except Exception as e:
-            self.log_result("Password Login (Correct)", 0, 200, None, False, f"Exception: {str(e)}")
-            
-        # 5. Password login (wrong password)
-        print("5. Testing password login with wrong password...")
-        try:
-            response = requests.post(f"{BACKEND_URL}/auth/password-login",
-                                   json={
-                                       "email": test_email,
-                                       "password": wrong_password
-                                   },
-                                   timeout=10)
-            data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {"error": "Non-JSON response"}
-            passed = response.status_code == 400
-            self.log_result("Password Login (Wrong)", response.status_code, 400, data, passed,
-                          "Should return 400 for wrong password")
-        except Exception as e:
-            self.log_result("Password Login (Wrong)", 0, 400, None, False, f"Exception: {str(e)}")
-            
-        # 6. Register duplicate email
-        print("6. Testing duplicate registration...")
-        try:
-            response = requests.post(f"{BACKEND_URL}/auth/register",
-                                   json={
-                                       "email": test_email,
-                                       "name": "Dupe",
-                                       "password": "test123"
-                                   },
-                                   timeout=10)
-            data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {"error": "Non-JSON response"}
-            passed = response.status_code == 400
-            self.log_result("Register Duplicate", response.status_code, 400, data, passed,
-                          "Should return 400 for duplicate email")
-        except Exception as e:
-            self.log_result("Register Duplicate", 0, 400, None, False, f"Exception: {str(e)}")
-            
-        # 7. Register with invalid data
-        print("7. Testing registration validation...")
-        try:
-            response = requests.post(f"{BACKEND_URL}/auth/register",
-                                   json={
-                                       "email": "bad",
-                                       "name": "X",
-                                       "password": "123"
-                                   },
-                                   timeout=10)
-            data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {"error": "Non-JSON response"}
-            passed = response.status_code == 400
-            self.log_result("Register Invalid Data", response.status_code, 400, data, passed,
-                          "Should fail validation for bad email/short password")
-        except Exception as e:
-            self.log_result("Register Invalid Data", 0, 400, None, False, f"Exception: {str(e)}")
-            
-    def test_core_features(self):
-        """Test core features that should still work"""
-        print("=== TESTING CORE FEATURES ===\n")
-        
-        # 8. Travel Style endpoint
-        print("8. Testing travel style endpoint...")
-        try:
-            response = requests.post(f"{BACKEND_URL}/travel-style",
-                                   json={
-                                       "country": "Paris, Ile-de-France, France",
-                                       "month": "December",
-                                       "occasion": "Date Night"
-                                   },
-                                   timeout=15)
-            data = response.json()
-            passed = response.status_code == 200 and "destination_info" in data
-            self.log_result("Travel Style", response.status_code, 200, data, passed,
-                          "Should return JSON with destination_info")
-        except Exception as e:
-            self.log_result("Travel Style", 0, 200, None, False, f"Exception: {str(e)}")
-            
-        # 9. Chat endpoint (beauty question)
-        print("9. Testing chat with beauty question...")
-        try:
-            response = requests.post(f"{BACKEND_URL}/chat",
-                                   json={"message": "What lipstick suits warm undertones?"},
-                                   timeout=15)
-            data = response.json()
-            passed = response.status_code == 200 and "response" in data
-            self.log_result("Chat Beauty Question", response.status_code, 200, data, passed,
-                          "Should return beauty response")
-        except Exception as e:
-            self.log_result("Chat Beauty Question", 0, 200, None, False, f"Exception: {str(e)}")
-            
-        # 10. Chat endpoint (script injection test)
-        print("10. Testing chat security (script injection)...")
-        try:
-            response = requests.post(f"{BACKEND_URL}/chat",
-                                   json={"message": "<script>alert(1)</script>"},
-                                   timeout=10)
-            data = response.json()
-            # Should either block it (200 with rejection message) or return 400
-            passed = response.status_code in [200, 400]
-            if response.status_code == 200:
-                # Check if it's properly blocked
-                response_text = data.get("response", "").lower()
-                blocked = "valid" in response_text or "beauty" in response_text or "question" in response_text
-                passed = blocked
-            self.log_result("Chat Security Test", response.status_code, "200/400", data, passed,
-                          "Should block script injection")
-        except Exception as e:
-            self.log_result("Chat Security Test", 0, "200/400", None, False, f"Exception: {str(e)}")
-            
-        # 11. Health check
-        print("11. Testing health endpoint...")
-        try:
-            response = requests.get(f"{BACKEND_URL}/health", timeout=10)
-            data = response.json()
-            passed = response.status_code == 200 and data.get("status") == "healthy"
-            self.log_result("Health Check", response.status_code, 200, data, passed,
-                          "Should return healthy status")
-        except Exception as e:
-            self.log_result("Health Check", 0, 200, None, False, f"Exception: {str(e)}")
-            
-    def test_removed_features(self):
-        """Test that removed features (guest/phone login) are handled properly"""
-        print("=== TESTING REMOVED FEATURES ===\n")
-        
-        # Test guest login endpoint (should still exist but may be deprecated)
-        print("12. Testing guest login endpoint (should be removed/deprecated)...")
-        try:
-            response = requests.post(f"{BACKEND_URL}/auth/guest-login", timeout=10)
-            # This endpoint might still exist in code but should be deprecated
-            # We'll just check if it responds - not critical for this test
-            data = response.json() if response.headers.get('content-type', '').startswith('application/json') else None
-            passed = True  # Not critical - just documenting
-            self.log_result("Guest Login (Deprecated)", response.status_code, "Any", data, passed,
-                          "Guest login feature should be removed from UI")
-        except Exception as e:
-            self.log_result("Guest Login (Deprecated)", 0, "Any", None, True, f"Endpoint not accessible: {str(e)}")
-            
-        # Test OTP endpoints (should still exist but deprecated)
-        print("13. Testing OTP request endpoint (should be removed/deprecated)...")
-        try:
-            response = requests.post(f"{BACKEND_URL}/auth/request-otp",
-                                   json={"phone": "+1234567890"},
-                                   timeout=10)
-            data = response.json() if response.headers.get('content-type', '').startswith('application/json') else None
-            passed = True  # Not critical - just documenting
-            self.log_result("OTP Request (Deprecated)", response.status_code, "Any", data, passed,
-                          "OTP login feature should be removed from UI")
-        except Exception as e:
-            self.log_result("OTP Request (Deprecated)", 0, "Any", None, True, f"Endpoint not accessible: {str(e)}")
-            
-    def run_all_tests(self):
-        """Run all tests"""
-        print(f"🚀 Starting MAK Backend Tests - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"Backend URL: {BACKEND_URL}\n")
-        
-        self.test_auth_flow()
-        self.test_core_features()
-        self.test_removed_features()
-        
-        print("=" * 60)
-        print(f"📊 TEST SUMMARY")
-        print(f"Total Tests: {self.passed + self.failed}")
-        print(f"✅ Passed: {self.passed}")
-        print(f"❌ Failed: {self.failed}")
-        print(f"Success Rate: {(self.passed/(self.passed + self.failed)*100):.1f}%")
-        print("=" * 60)
-        
-        # Print failed tests details
-        if self.failed > 0:
-            print("\n🔍 FAILED TESTS DETAILS:")
-            for result in self.results:
-                if not result["passed"]:
-                    print(f"❌ {result['test']}: {result['details']}")
-                    print(f"   Status: {result['status_code']}, Response: {result['response_snippet']}")
-        
-        return self.failed == 0
+            log_test("Register test user", "FAIL", f"Status: {response.status_code}, Response: {response.text}")
+            test_results.append(("Register test user", "FAIL", response.status_code))
+            return test_results
+    except Exception as e:
+        log_test("Register test user", "FAIL", f"Exception: {str(e)}")
+        test_results.append(("Register test user", "FAIL", "Exception"))
+        return test_results
+    
+    # Test 2: Change password with CORRECT current password
+    print("2. CHANGING PASSWORD WITH CORRECT CURRENT PASSWORD")
+    change_data = {
+        "user_id": user_id,
+        "current_password": "oldpass123",
+        "new_password": "newpass456"
+    }
+    
+    try:
+        response = requests.post(f"{BASE_URL}/auth/change-password", json=change_data, timeout=10)
+        if response.status_code == 200:
+            log_test("Change password (correct current)", "PASS", f"Response: {response.json()}")
+            test_results.append(("Change password (correct current)", "PASS", response.status_code))
+        else:
+            log_test("Change password (correct current)", "FAIL", f"Status: {response.status_code}, Response: {response.text}")
+            test_results.append(("Change password (correct current)", "FAIL", response.status_code))
+    except Exception as e:
+        log_test("Change password (correct current)", "FAIL", f"Exception: {str(e)}")
+        test_results.append(("Change password (correct current)", "FAIL", "Exception"))
+    
+    # Test 3: Try login with OLD password (should FAIL)
+    print("3. TRYING LOGIN WITH OLD PASSWORD (should fail)")
+    old_login_data = {
+        "email": "pw-test@mak.com",
+        "password": "oldpass123"
+    }
+    
+    try:
+        response = requests.post(f"{BASE_URL}/auth/password-login", json=old_login_data, timeout=10)
+        if response.status_code == 400:
+            log_test("Login with old password (should fail)", "PASS", f"Correctly rejected with 400: {response.json()}")
+            test_results.append(("Login with old password (should fail)", "PASS", response.status_code))
+        else:
+            log_test("Login with old password (should fail)", "FAIL", f"Expected 400, got {response.status_code}: {response.text}")
+            test_results.append(("Login with old password (should fail)", "FAIL", response.status_code))
+    except Exception as e:
+        log_test("Login with old password (should fail)", "FAIL", f"Exception: {str(e)}")
+        test_results.append(("Login with old password (should fail)", "FAIL", "Exception"))
+    
+    # Test 4: Try login with NEW password (should SUCCEED)
+    print("4. TRYING LOGIN WITH NEW PASSWORD (should succeed)")
+    new_login_data = {
+        "email": "pw-test@mak.com",
+        "password": "newpass456"
+    }
+    
+    try:
+        response = requests.post(f"{BASE_URL}/auth/password-login", json=new_login_data, timeout=10)
+        if response.status_code == 200:
+            log_test("Login with new password (should succeed)", "PASS", f"Successfully logged in: {response.json()}")
+            test_results.append(("Login with new password (should succeed)", "PASS", response.status_code))
+        else:
+            log_test("Login with new password (should succeed)", "FAIL", f"Status: {response.status_code}, Response: {response.text}")
+            test_results.append(("Login with new password (should succeed)", "FAIL", response.status_code))
+    except Exception as e:
+        log_test("Login with new password (should succeed)", "FAIL", f"Exception: {str(e)}")
+        test_results.append(("Login with new password (should succeed)", "FAIL", "Exception"))
+    
+    # Test 5: Try change password with WRONG current password
+    print("5. TRYING TO CHANGE PASSWORD WITH WRONG CURRENT PASSWORD")
+    wrong_current_data = {
+        "user_id": user_id,
+        "current_password": "wrongpass",
+        "new_password": "another123"
+    }
+    
+    try:
+        response = requests.post(f"{BASE_URL}/auth/change-password", json=wrong_current_data, timeout=10)
+        if response.status_code == 400:
+            log_test("Change password (wrong current)", "PASS", f"Correctly rejected with 400: {response.json()}")
+            test_results.append(("Change password (wrong current)", "PASS", response.status_code))
+        else:
+            log_test("Change password (wrong current)", "FAIL", f"Expected 400, got {response.status_code}: {response.text}")
+            test_results.append(("Change password (wrong current)", "FAIL", response.status_code))
+    except Exception as e:
+        log_test("Change password (wrong current)", "FAIL", f"Exception: {str(e)}")
+        test_results.append(("Change password (wrong current)", "FAIL", "Exception"))
+    
+    # Test 6: Try change password with too SHORT new password
+    print("6. TRYING TO CHANGE PASSWORD WITH TOO SHORT NEW PASSWORD")
+    short_password_data = {
+        "user_id": user_id,
+        "current_password": "newpass456",
+        "new_password": "ab"
+    }
+    
+    try:
+        response = requests.post(f"{BASE_URL}/auth/change-password", json=short_password_data, timeout=10)
+        if response.status_code == 400:
+            log_test("Change password (too short)", "PASS", f"Correctly rejected with 400: {response.json()}")
+            test_results.append(("Change password (too short)", "PASS", response.status_code))
+        else:
+            log_test("Change password (too short)", "FAIL", f"Expected 400, got {response.status_code}: {response.text}")
+            test_results.append(("Change password (too short)", "FAIL", response.status_code))
+    except Exception as e:
+        log_test("Change password (too short)", "FAIL", f"Exception: {str(e)}")
+        test_results.append(("Change password (too short)", "FAIL", "Exception"))
+    
+    # Test 7: Try change password with SAME old and new
+    print("7. TRYING TO CHANGE PASSWORD WITH SAME OLD AND NEW PASSWORD")
+    same_password_data = {
+        "user_id": user_id,
+        "current_password": "newpass456",
+        "new_password": "newpass456"
+    }
+    
+    try:
+        response = requests.post(f"{BASE_URL}/auth/change-password", json=same_password_data, timeout=10)
+        if response.status_code == 400:
+            log_test("Change password (same old/new)", "PASS", f"Correctly rejected with 400: {response.json()}")
+            test_results.append(("Change password (same old/new)", "PASS", response.status_code))
+        else:
+            log_test("Change password (same old/new)", "FAIL", f"Expected 400, got {response.status_code}: {response.text}")
+            test_results.append(("Change password (same old/new)", "FAIL", response.status_code))
+    except Exception as e:
+        log_test("Change password (same old/new)", "FAIL", f"Exception: {str(e)}")
+        test_results.append(("Change password (same old/new)", "FAIL", "Exception"))
+    
+    return test_results
+
+def main():
+    """Main test execution"""
+    print("MAK App Backend Password Change Flow Testing")
+    print(f"Testing against: {BASE_URL}")
+    print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print()
+    
+    # Test password change flow
+    results = test_password_change_flow()
+    
+    # Summary
+    print("=" * 60)
+    print("TEST SUMMARY")
+    print("=" * 60)
+    
+    passed = sum(1 for _, status, _ in results if status == "PASS")
+    total = len(results)
+    
+    for test_name, status, status_code in results:
+        status_symbol = "✅" if status == "PASS" else "❌"
+        print(f"{status_symbol} {test_name} (HTTP {status_code})")
+    
+    print()
+    print(f"OVERALL: {passed}/{total} tests passed ({(passed/total)*100:.1f}%)")
+    
+    if passed == total:
+        print("🎉 ALL TESTS PASSED - Password change flow working correctly!")
+        return 0
+    else:
+        print("⚠️  SOME TESTS FAILED - Password change flow has issues")
+        return 1
 
 if __name__ == "__main__":
-    tester = MAKBackendTester()
-    success = tester.run_all_tests()
-    
-    # Save results to file
-    with open("/app/test_results_backend.json", "w") as f:
-        json.dump({
-            "summary": {
-                "total": tester.passed + tester.failed,
-                "passed": tester.passed,
-                "failed": tester.failed,
-                "success_rate": (tester.passed/(tester.passed + tester.failed)*100) if (tester.passed + tester.failed) > 0 else 0
-            },
-            "results": tester.results,
-            "timestamp": datetime.now().isoformat()
-        }, f, indent=2)
-    
-    sys.exit(0 if success else 1)
+    sys.exit(main())

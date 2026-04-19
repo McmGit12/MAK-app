@@ -104,4 +104,10 @@ export const api = {
     const response = await apiClient.post('/chat', { message, session_id: sessionId });
     return response.data;
   },
+
+  // Change Password
+  changePassword: async (userId: string, currentPassword: string, newPassword: string) => {
+    const response = await apiClient.post('/auth/change-password', { user_id: userId, current_password: currentPassword, new_password: newPassword });
+    return response.data;
+  },
 };

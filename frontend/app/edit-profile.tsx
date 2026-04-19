@@ -62,20 +62,16 @@ export default function EditProfileScreen() {
     if (/(<[^>]*>|javascript:|on\w+=)/i.test(newPassword)) { setPwError('Invalid characters in password.'); return; }
     if (newPassword !== confirmPassword) { setPwError('New passwords do not match.'); return; }
     if (currentPassword === newPassword) { setPwError('New password must be different from current.'); return; }
+    if (!user?.id) { setPwError('Please log in again.'); return; }
 
     setSavingPw(true);
     try {
-      // Verify current password by trying to login
-      const userHash = user?.user_hash;
-      // For now we'll use a backend endpoint
-      await api.passwordLogin(user?.user_hash || '', currentPassword).catch(() => {
-        throw new Error('Current password is incorrect.');
-      });
+      await api.changePassword(user.id, currentPassword, newPassword);
       setPwSuccess('Password updated successfully!');
       setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
       setShowPasswordSection(false);
     } catch (err: any) {
-      setPwError(err.message || 'Failed to change password. Check your current password.');
+      setPwError(err?.response?.data?.detail || 'Failed to change password. Please check your current password.');
     } finally { setSavingPw(false); }
   };
 
