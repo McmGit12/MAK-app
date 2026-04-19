@@ -110,4 +110,10 @@ export const api = {
     const response = await apiClient.post('/auth/change-password', { user_id: userId, current_password: currentPassword, new_password: newPassword });
     return response.data;
   },
+
+  // Get Profile
+  getProfile: async (userId: string) => {
+    const response = await apiClient.get(`/auth/profile/${userId}`);
+    return response.data;
+  },
 };

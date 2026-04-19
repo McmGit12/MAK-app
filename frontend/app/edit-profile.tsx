@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -27,9 +27,11 @@ const sanitize = (text: string) => text.replace(/<[^>]*>|javascript:|on\w+=/gi, 
 
 export default function EditProfileScreen() {
   const router = useRouter();
-  const { user, updateUserName } = useAuth();
+  const { user, updateUserName, login } = useAuth();
   const { colors } = useTheme();
+  const [profileEmail, setProfileEmail] = useState(user?.email || '');
   const [displayName, setDisplayName] = useState(user?.display_name || '');
+  const [profileLoading, setProfileLoading] = useState(true);
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -42,6 +44,25 @@ export default function EditProfileScreen() {
   const [pwError, setPwError] = useState('');
   const [nameSuccess, setNameSuccess] = useState('');
   const [pwSuccess, setPwSuccess] = useState('');
+
+  // Fetch fresh profile data from backend
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user?.id) { setProfileLoading(false); return; }
+      try {
+        const profile = await api.getProfile(user.id);
+        if (profile.email) setProfileEmail(profile.email);
+        if (profile.display_name) setDisplayName(profile.display_name);
+        // Update local session with fresh data
+        await login({ ...user, email: profile.email, display_name: profile.display_name });
+      } catch (err) {
+        console.log('Could not refresh profile');
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+    fetchProfile();
+  }, []);
 
   const handleSaveName = async () => {
     const name = sanitize(displayName.trim());
@@ -103,7 +124,7 @@ export default function EditProfileScreen() {
               </View>
               <View style={st.fieldContent}>
                 <Text style={[st.fieldLabel, { color: colors.textSecondary }]}>Email</Text>
-                <Text style={[st.fieldValue, { color: colors.text }]}>{maskEmail(user?.email)}</Text>
+                <Text style={[st.fieldValue, { color: colors.text }]}>{profileLoading ? 'Loading...' : maskEmail(profileEmail)}</Text>
               </View>
               <Ionicons name="lock-closed" size={16} color={colors.textTertiary} />
             </View>

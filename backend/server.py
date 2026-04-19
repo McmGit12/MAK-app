@@ -416,12 +416,31 @@ async def password_login(data: PasswordLoginRequest):
         if not verify_password(data.password, stored_hash):
             raise HTTPException(status_code=400, detail="Incorrect password. Please try again.")
     
+    # Ensure email is stored for older accounts
+    if not user.get("email"):
+        await db.users.update_one({"id": user["id"]}, {"$set": {"email": email}})
+    
     return UserResponse(id=user["id"], user_hash=user["user_hash"], login_method="email", display_name=user.get("display_name"), email=user.get("email", email), created_at=user["created_at"])
 
 class ChangePasswordRequest(BaseModel):
     user_id: str
     current_password: str
     new_password: str
+
+@api_router.get("/auth/profile/{user_id}")
+async def get_profile(user_id: str):
+    """Get user profile by ID"""
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return UserResponse(
+        id=user["id"],
+        user_hash=user["user_hash"],
+        login_method=user.get("login_method", "email"),
+        display_name=user.get("display_name"),
+        email=user.get("email"),
+        created_at=user["created_at"]
+    )
 
 @api_router.post("/auth/change-password")
 async def change_password(data: ChangePasswordRequest):
