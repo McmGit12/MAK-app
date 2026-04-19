@@ -6,6 +6,7 @@ interface User {
   user_hash: string;
   login_method: string;
   display_name?: string | null;
+  email?: string | null;
   created_at: string;
 }
 

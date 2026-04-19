@@ -9,8 +9,10 @@ import { api } from '../src/services/api';
 
 const maskEmail = (email?: string) => {
   if (!email) return 'Not provided';
-  const [local, domain] = email.split('@');
-  if (!domain) return email;
+  const parts = email.split('@');
+  if (parts.length !== 2) return email;
+  const local = parts[0];
+  const domain = parts[1];
   const masked = local.charAt(0) + '***' + (local.length > 1 ? local.charAt(local.length - 1) : '');
   return masked + '@' + domain;
 };
@@ -101,7 +103,7 @@ export default function EditProfileScreen() {
               </View>
               <View style={st.fieldContent}>
                 <Text style={[st.fieldLabel, { color: colors.textSecondary }]}>Email</Text>
-                <Text style={[st.fieldValue, { color: colors.text }]}>{maskEmail(user?.user_hash)}</Text>
+                <Text style={[st.fieldValue, { color: colors.text }]}>{maskEmail(user?.email)}</Text>
               </View>
               <Ionicons name="lock-closed" size={16} color={colors.textTertiary} />
             </View>

@@ -51,6 +51,7 @@ class UserResponse(BaseModel):
     user_hash: str
     login_method: str
     display_name: Optional[str] = None
+    email: Optional[str] = None
     created_at: datetime
 
 class UpdateDisplayName(BaseModel):
@@ -393,12 +394,13 @@ async def register_user(data: RegisterRequest):
         "login_method": "email",
         "display_name": data.name.strip(),
         "password_hash": hash_password(data.password),
+        "email": email,
         "phone": data.phone,
         "country_code": data.country_code,
         "created_at": datetime.utcnow()
     }
     await db.users.insert_one(new_user)
-    return UserResponse(id=user_id, user_hash=user_hash, login_method="email", display_name=data.name.strip(), created_at=new_user["created_at"])
+    return UserResponse(id=user_id, user_hash=user_hash, login_method="email", display_name=data.name.strip(), email=email, created_at=new_user["created_at"])
 
 @api_router.post("/auth/password-login", response_model=UserResponse)
 async def password_login(data: PasswordLoginRequest):
@@ -414,7 +416,7 @@ async def password_login(data: PasswordLoginRequest):
         if not verify_password(data.password, stored_hash):
             raise HTTPException(status_code=400, detail="Incorrect password. Please try again.")
     
-    return UserResponse(id=user["id"], user_hash=user["user_hash"], login_method="email", display_name=user.get("display_name"), created_at=user["created_at"])
+    return UserResponse(id=user["id"], user_hash=user["user_hash"], login_method="email", display_name=user.get("display_name"), email=user.get("email", email), created_at=user["created_at"])
 
 class ChangePasswordRequest(BaseModel):
     user_id: str
