@@ -14,15 +14,13 @@ function useProtectedRoute() {
   useEffect(() => {
     if (loading) return;
 
-    const inApp = segments[0] === '(tabs)';
+    const inTabs = segments[0] === '(tabs)';
 
-    if (!user && inApp) {
-      // User logged out while in app → go to login
+    // ONLY handle logout redirect: user is null but still in app
+    if (!user && inTabs) {
       router.replace('/');
-    } else if (user && !inApp) {
-      // User logged in but on login page → go to app
-      router.replace('/(tabs)');
     }
+    // Login redirect is handled by the login screen's own useEffect
   }, [user, loading, segments]);
 }
 
@@ -73,12 +71,6 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  container: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });
