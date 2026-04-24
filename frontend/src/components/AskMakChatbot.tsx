@@ -82,7 +82,7 @@ export default function AskMakChatbot() {
       const botMsg: Message = { id: (Date.now() + 1).toString(), text: res.response, isUser: false, timestamp: new Date() };
       setMessages(prev => [...prev, botMsg]);
     } catch (err) {
-      const errMsg: Message = { id: (Date.now() + 1).toString(), text: "Oops! I couldn't respond. Please try again.", isUser: false, timestamp: new Date() };
+      const errMsg: Message = { id: (Date.now() + 1).toString(), text: "Sorry we are experiencing issues, please try again in some time.", isUser: false, timestamp: new Date() };
       setMessages(prev => [...prev, errMsg]);
     } finally {
       setSending(false);

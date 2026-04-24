@@ -88,7 +88,7 @@ export default function AnalysisResultScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle" size={48} color={colors.error} />
-          <Text style={[styles.errorText, { color: colors.error }]}>Failed to load analysis</Text>
+          <Text style={[styles.errorText, { color: colors.error }]}>Sorry we are experiencing issues, please try again in some time.</Text>
           <TouchableOpacity style={[styles.backButton, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
             <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>

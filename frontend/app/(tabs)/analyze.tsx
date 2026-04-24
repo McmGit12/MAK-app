@@ -104,7 +104,10 @@ export default function AnalyzeScreen() {
     try {
       const result = await api.analyzeSkin(imageBase64, user.id, mode);
       router.push({ pathname: '/analysis-result', params: { analysisId: result.id, mode } });
-    } catch (err: any) { Alert.alert('Analysis Failed', err.message || 'Please try again'); } finally { setAnalyzing(false); }
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      Alert.alert('Oops!', detail || 'Sorry we are experiencing issues, please try again in some time.');
+    } finally { setAnalyzing(false); }
   };
 
   const getTravelSuggestions = async () => {
@@ -114,7 +117,10 @@ export default function AnalyzeScreen() {
     try {
       const result = await api.getTravelStyle(location, selectedMonth, selectedOccasion, user?.id);
       setTravelResult(result);
-    } catch (err: any) { Alert.alert('Oops!', 'Failed to get suggestions. Please try again.'); } finally { setTravelLoading(false); }
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      Alert.alert('Oops!', detail || 'Sorry we are experiencing issues, please try again in some time.');
+    } finally { setTravelLoading(false); }
   };
 
   if (cameraMode) {

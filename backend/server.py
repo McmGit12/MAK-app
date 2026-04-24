@@ -76,7 +76,7 @@ async def llm_with_timeout(coro, timeout_seconds=30):
     try:
         return await asyncio.wait_for(coro, timeout=timeout_seconds)
     except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="The analysis is taking longer than expected. Please try again.")
+        raise HTTPException(status_code=504, detail="Sorry we are experiencing issues, please try again in some time.")
 
 async def llm_call_resilient(chat_factory, user_message, first_timeout=20, retry_timeout=35):
     """Run an LLM call with two-phase resilience:
@@ -107,7 +107,7 @@ async def db_with_timeout(coro, timeout_seconds=10):
     try:
         return await asyncio.wait_for(coro, timeout=timeout_seconds)
     except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Service is temporarily slow. Please try again in a moment.")
+        raise HTTPException(status_code=504, detail="Sorry we are experiencing issues, please try again in some time.")
 
 # ==================== MODELS ====================
 
@@ -331,32 +331,12 @@ async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Di
         return analysis
         
     except Exception as e:
-        logger.error(f"AI Analysis error: {str(e)}")
-        # Return default analysis if AI fails
-        return {
-            "skin_type": "combination",
-            "skin_tone": "medium",
-            "undertone": "neutral",
-            "face_shape": "oval",
-            "skin_concerns": ["general care needed"],
-            "texture_analysis": "Unable to analyze - please try with a clearer photo",
-            "ai_recommendations": [
-                {
-                    "category": "foundation",
-                    "recommendation": "Medium coverage liquid foundation",
-                    "shade_range": "Match to your jawline",
-                    "tips": "Apply with a damp beauty sponge for natural finish",
-                    "reason": "Versatile for most skin types"
-                },
-                {
-                    "category": "skincare",
-                    "recommendation": "Gentle daily moisturizer with SPF",
-                    "shade_range": "N/A",
-                    "tips": "Apply morning and night",
-                    "reason": "Essential for all skin types"
-                }
-            ]
-        }
+        logger.error(f"Analysis error: {str(e)}")
+        # Raise so frontend shows a clean error to the user (no silent fake data)
+        raise HTTPException(
+            status_code=503,
+            detail="Sorry we are experiencing issues, please try again in some time."
+        )
 
 # ==================== APP INSTALL TRACKING ====================
 
@@ -989,22 +969,10 @@ async def get_travel_style(data: TravelStyleRequest):
         
     except Exception as e:
         logger.error(f"Travel style error: {str(e)}")
-        return {
-            "ai_status": "fallback",
-            "fallback_message": "Our AI is a bit busy right now — here are some general tips. Please try again in a moment for a personalized plan.",
-            "destination_info": f"Planning for {data.country} in {data.month} for {data.occasion}",
-            "outfit_suggestions": [
-                {"category": "Daywear", "suggestion": "Comfortable smart-casual outfit", "tips": "Layer for versatility"},
-                {"category": "Evening", "suggestion": "Elegant dinner outfit", "tips": "Choose wrinkle-resistant fabrics for travel"},
-            ],
-            "makeup_look": [
-                {"category": "Base", "suggestion": "Lightweight foundation with SPF", "tips": "Travel-friendly multi-use products"},
-                {"category": "Lips", "suggestion": "Long-lasting lip color", "tips": "Choose a versatile shade that works day to night"},
-            ],
-            "accessories": ["Statement earrings", "Versatile scarf", "Comfortable shoes"],
-            "dos_and_donts": {"dos": ["Research local dress codes", "Pack versatile pieces"], "donts": ["Overpack", "Wear inappropriate clothing for local culture"]},
-            "overall_vibe": "Chic and comfortable travel style"
-        }
+        raise HTTPException(
+            status_code=503,
+            detail="Sorry we are experiencing issues, please try again in some time."
+        )
 
 # ==================== CHATBOT ENDPOINT ====================
 
@@ -1079,7 +1047,7 @@ async def chat_with_mak(data: ChatMessage):
             except Exception as e2:
                 logger.error(f"Chat retry failed: {str(e2)[:100]}")
                 return {
-                    "response": "I'm having a little trouble connecting right now. Please try asking again in a moment!",
+                    "response": "Sorry we are experiencing issues, please try again in some time.",
                     "session_id": session_id,
                     "ai_status": "fallback",
                 }
@@ -1094,7 +1062,7 @@ async def chat_with_mak(data: ChatMessage):
         
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
-        return {"response": "I'm having trouble right now. Please try again in a moment!", "session_id": data.session_id, "ai_status": "fallback"}
+        return {"response": "Sorry we are experiencing issues, please try again in some time.", "session_id": data.session_id, "ai_status": "fallback"}
 
 @api_router.get("/")
 async def root():
