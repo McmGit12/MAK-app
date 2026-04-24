@@ -356,7 +356,7 @@ class InstallStats(BaseModel):
 async def register_install(device_id: str, platform: str = "android", app_version: str = "1.0.0"):
     """Register an app install - called when app is first opened"""
     # Check if device already registered
-    existing = await db.app_installs.find_one({"device_id": device_id})
+    existing = await db.app_installs.find_one({"device_id": device_id}, {"id": 1})
     if existing:
         return {"status": "already_registered", "install_id": existing.get("id")}
     
@@ -422,7 +422,7 @@ async def check_email(data: CheckEmailRequest):
     if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
         raise HTTPException(status_code=400, detail="Please enter a valid email address.")
     user_hash = hash_identifier(email)
-    existing = await db_with_timeout(db.users.find_one({"user_hash": user_hash, "login_method": "email"}))
+    existing = await db_with_timeout(db.users.find_one({"user_hash": user_hash, "login_method": "email"}, {"_id": 1}))
     return {"exists": existing is not None}
 
 @api_router.post("/auth/register", response_model=UserResponse)
@@ -442,7 +442,7 @@ async def register_user(data: RegisterRequest):
         raise HTTPException(status_code=400, detail="Invalid characters in name.")
     
     user_hash = hash_identifier(email)
-    existing = await db.users.find_one({"user_hash": user_hash, "login_method": "email"})
+    existing = await db.users.find_one({"user_hash": user_hash, "login_method": "email"}, {"_id": 1})
     if existing:
         raise HTTPException(status_code=400, detail="An account with this email already exists. Please sign in.")
     
