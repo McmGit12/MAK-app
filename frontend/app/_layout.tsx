@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { ThemeProvider, useTheme } from '../src/context/ThemeContext';
+import { api } from '../src/services/api';
 
 function useProtectedRoute() {
   const { user, loading } = useAuth();
@@ -24,11 +25,20 @@ function useProtectedRoute() {
   }, [user, loading, segments]);
 }
 
+function useBackendWarmup() {
+  // Kick off a warmup ping on app launch to kill cold-start latency.
+  // Non-blocking and non-fatal — the app works even if this fails.
+  useEffect(() => {
+    api.warmup().catch(() => {});
+  }, []);
+}
+
 function InnerLayout() {
   const { isDark, colors } = useTheme();
   const { loading } = useAuth();
 
   useProtectedRoute();
+  useBackendWarmup();
 
   if (loading) {
     return (

@@ -20,23 +20,27 @@ import time
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection with PRODUCTION-READY pooling
+# MongoDB connection with PRODUCTION-READY pooling + auto-reconnect
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 client = AsyncIOMotorClient(
     mongo_url,
-    maxPoolSize=50,              # Max connections in pool
-    minPoolSize=5,               # Keep 5 connections warm
-    connectTimeoutMS=5000,       # 5s to establish connection
-    serverSelectionTimeoutMS=5000,  # 5s to find a server
-    socketTimeoutMS=30000,       # 30s for operations
-    maxIdleTimeMS=60000,         # Close idle connections after 60s
-    retryWrites=True,            # Auto-retry failed writes
-    retryReads=True,             # Auto-retry failed reads
+    maxPoolSize=50,                  # Max connections in pool
+    minPoolSize=5,                   # Keep 5 connections warm
+    connectTimeoutMS=5000,           # 5s to establish connection
+    serverSelectionTimeoutMS=5000,   # 5s to find a server
+    socketTimeoutMS=30000,           # 30s for operations
+    maxIdleTimeMS=60000,             # Close idle connections after 60s
+    retryWrites=True,                # Auto-retry failed writes
+    retryReads=True,                 # Auto-retry failed reads
+    heartbeatFrequencyMS=10000,      # Ping every 10s to keep pool alive
+    waitQueueTimeoutMS=5000,         # Max wait time for available connection
 )
 db = client[os.environ.get('DB_NAME', 'complexionfit_db')]
 
 # Emergent LLM Key
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
+if not EMERGENT_LLM_KEY:
+    print("WARNING: EMERGENT_LLM_KEY is not set. AI features will return fallback responses.")
 
 # Create the main app
 app = FastAPI(title="ComplexionFit API", version="1.0.0")
@@ -73,6 +77,30 @@ async def llm_with_timeout(coro, timeout_seconds=30):
         return await asyncio.wait_for(coro, timeout=timeout_seconds)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="The analysis is taking longer than expected. Please try again.")
+
+async def llm_call_resilient(chat_factory, user_message, first_timeout=20, retry_timeout=35):
+    """Run an LLM call with two-phase resilience:
+    1. First attempt: strict timeout for fast failure
+    2. On timeout/failure: retry once with longer timeout
+    Returns (response_text, status) where status is 'ok', 'retried', or 'failed'
+    """
+    # Attempt 1: strict timeout
+    try:
+        chat = chat_factory()
+        response = await asyncio.wait_for(chat.send_message(user_message), timeout=first_timeout)
+        return response, "ok"
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"LLM first attempt failed ({type(e).__name__}: {str(e)[:100]}); retrying with longer timeout")
+    
+    # Attempt 2: longer timeout, fresh chat instance
+    try:
+        await asyncio.sleep(0.5)  # brief backoff
+        chat = chat_factory()
+        response = await asyncio.wait_for(chat.send_message(user_message), timeout=retry_timeout)
+        return response, "retried"
+    except Exception as e:
+        logger.error(f"LLM retry also failed ({type(e).__name__}: {str(e)[:100]})")
+        return None, "failed"
 
 async def db_with_timeout(coro, timeout_seconds=10):
     """Run a DB operation with a hard timeout"""
@@ -261,7 +289,7 @@ async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Di
             6. Weekly Treatment - based on their needs"""
             user_text = "Please analyze this facial image and provide a personalized skincare routine. Be specific to what you observe and honest about your assessment. Return ONLY valid JSON, no other text."
 
-        chat = LlmChat(
+        chat_factory = lambda: LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"skin-analysis-{uuid.uuid4()}",
             system_message=system_msg
@@ -275,8 +303,17 @@ async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Di
             file_contents=[image_content]
         )
         
-        response = await llm_with_timeout(chat.send_message(user_message), timeout_seconds=35)
-        logger.info(f"AI Response received: {response[:200]}...")
+        # Resilient LLM call: strict timeout first, then retry with longer timeout
+        response, status = await llm_call_resilient(
+            chat_factory,
+            user_message,
+            first_timeout=25,
+            retry_timeout=40,
+        )
+        if response is None:
+            # Both attempts failed - fall through to except block via raising
+            raise Exception("LLM unavailable after retry")
+        logger.info(f"AI Response received (status={status}): {response[:200]}...")
         
         # Parse JSON response
         import json
@@ -893,7 +930,7 @@ class TravelStyleRequest(BaseModel):
 async def get_travel_style(data: TravelStyleRequest):
     """Get makeup and dressing suggestions based on travel destination"""
     try:
-        chat = LlmChat(
+        chat_factory = lambda: LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"travel-style-{uuid.uuid4()}",
             system_message="""You are a friendly, well-traveled fashion stylist who gives practical advice.
@@ -931,7 +968,15 @@ async def get_travel_style(data: TravelStyleRequest):
             text=f"I'm travelling to {data.country} in {data.month} for a {data.occasion}. Give me specific outfit and makeup recommendations for THIS exact location, considering the typical weather there in {data.month}, local cultural expectations, and the occasion. Be specific to this destination - don't give generic advice. Return ONLY valid JSON."
         )
         
-        response = await llm_with_timeout(chat.send_message(user_message), timeout_seconds=35)
+        # Resilient: strict 20s first, retry with 35s
+        response, status = await llm_call_resilient(
+            chat_factory,
+            user_message,
+            first_timeout=20,
+            retry_timeout=35,
+        )
+        if response is None:
+            raise Exception("LLM unavailable after retry")
         
         import json
         clean = response.strip()
@@ -939,11 +984,14 @@ async def get_travel_style(data: TravelStyleRequest):
         if clean.startswith("```"): clean = clean[3:]
         if clean.endswith("```"): clean = clean[:-3]
         result = json.loads(clean.strip())
+        result["ai_status"] = status
         return result
         
     except Exception as e:
         logger.error(f"Travel style error: {str(e)}")
         return {
+            "ai_status": "fallback",
+            "fallback_message": "Our AI is a bit busy right now — here are some general tips. Please try again in a moment for a personalized plan.",
             "destination_info": f"Planning for {data.country} in {data.month} for {data.occasion}",
             "outfit_suggestions": [
                 {"category": "Daywear", "suggestion": "Comfortable smart-casual outfit", "tips": "Layer for versatility"},
@@ -1018,7 +1066,23 @@ async def chat_with_mak(data: ChatMessage):
         
         chat = chat_sessions[session_id]
         user_msg = UserMessage(text=msg)
-        response = await llm_with_timeout(chat.send_message(user_msg), timeout_seconds=20)
+        
+        # Try strict first, then retry once with longer timeout
+        response = None
+        try:
+            response = await asyncio.wait_for(chat.send_message(user_msg), timeout=15)
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"Chat first attempt failed: {str(e)[:100]}; retrying")
+            try:
+                await asyncio.sleep(0.3)
+                response = await asyncio.wait_for(chat.send_message(user_msg), timeout=25)
+            except Exception as e2:
+                logger.error(f"Chat retry failed: {str(e2)[:100]}")
+                return {
+                    "response": "I'm having a little trouble connecting right now. Please try asking again in a moment!",
+                    "session_id": session_id,
+                    "ai_status": "fallback",
+                }
         
         # Limit sessions in memory (cleanup old ones)
         if len(chat_sessions) > 100:
@@ -1026,11 +1090,11 @@ async def chat_with_mak(data: ChatMessage):
             for k in oldest:
                 del chat_sessions[k]
         
-        return {"response": response, "session_id": session_id}
+        return {"response": response, "session_id": session_id, "ai_status": "ok"}
         
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
-        return {"response": "I'm having trouble right now. Please try again in a moment!", "session_id": data.session_id}
+        return {"response": "I'm having trouble right now. Please try again in a moment!", "session_id": data.session_id, "ai_status": "fallback"}
 
 @api_router.get("/")
 async def root():
@@ -1038,20 +1102,81 @@ async def root():
 
 @api_router.get("/health")
 async def health_check():
-    """Health check with MongoDB connectivity verification"""
+    """Health check with MongoDB connectivity verification.
+    Returns 200 always so load balancers don't kill the pod on transient DB issues."""
     mongo_ok = False
     try:
         result = await asyncio.wait_for(db.command("ping"), timeout=3)
         mongo_ok = result.get("ok") == 1.0
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Health check DB ping failed: {str(e)[:100]}")
         mongo_ok = False
     
-    status = "healthy" if mongo_ok else "degraded"
     return {
-        "status": status,
+        "status": "healthy" if mongo_ok else "degraded",
         "timestamp": datetime.utcnow().isoformat(),
         "mongodb": "connected" if mongo_ok else "disconnected",
+        "llm_key_configured": bool(EMERGENT_LLM_KEY),
     }
+
+@api_router.get("/warmup")
+async def warmup():
+    """Warmup endpoint to pre-initialize connections and kill cold starts.
+    Called by the frontend on app launch. Pings DB, ensures pool is warm."""
+    result = {"status": "warm", "timestamp": datetime.utcnow().isoformat()}
+    # Pre-warm MongoDB pool
+    try:
+        await asyncio.wait_for(db.command("ping"), timeout=3)
+        # Touch common collections so indexes/stats get loaded
+        await asyncio.wait_for(db.users.estimated_document_count(), timeout=3)
+        result["mongodb"] = "warm"
+    except Exception as e:
+        logger.warning(f"Warmup DB step failed: {str(e)[:100]}")
+        result["mongodb"] = "cold"
+    return result
+
+# ==================== STARTUP EVENT (PRE-WARM + INDEXES) ====================
+
+@app.on_event("startup")
+async def startup_event():
+    """Pre-warm MongoDB pool, create indexes for fast queries.
+    Non-fatal: if DB is briefly unavailable, the app still starts and will retry on first request."""
+    try:
+        # Ping to wake up the connection pool
+        await asyncio.wait_for(db.command("ping"), timeout=5)
+        logger.info("MongoDB connection pool pre-warmed successfully")
+    except Exception as e:
+        logger.warning(f"Startup DB ping failed (will retry on first request): {str(e)[:100]}")
+    
+    # Create indexes (safe to call repeatedly - MongoDB is idempotent)
+    try:
+        await asyncio.wait_for(
+            db.users.create_index("user_hash"),
+            timeout=5
+        )
+        await asyncio.wait_for(
+            db.users.create_index("id", unique=True),
+            timeout=5
+        )
+        await asyncio.wait_for(
+            db.analyses.create_index([("user_id", 1), ("created_at", -1)]),
+            timeout=5
+        )
+        await asyncio.wait_for(
+            db.analyses.create_index("id", unique=True),
+            timeout=5
+        )
+        await asyncio.wait_for(
+            db.app_installs.create_index("device_id", unique=True),
+            timeout=5
+        )
+        await asyncio.wait_for(
+            db.feedback.create_index([("user_id", 1), ("created_at", -1)]),
+            timeout=5
+        )
+        logger.info("MongoDB indexes ensured")
+    except Exception as e:
+        logger.warning(f"Index creation failed (non-fatal): {str(e)[:100]}")
 
 # Include the router in the main app
 app.include_router(api_router)

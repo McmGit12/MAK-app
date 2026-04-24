@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -10,7 +10,62 @@ const apiClient = axios.create({
   },
 });
 
+// ============================================================
+// AUTO-RETRY INTERCEPTOR
+// Retries on transient errors (network/502/503/504) up to 2 times
+// with exponential backoff. Does NOT retry on 4xx (user errors).
+// ============================================================
+type RetryConfig = AxiosRequestConfig & { _retryCount?: number };
+
+const MAX_RETRIES = 2;
+const RETRY_DELAYS = [1000, 2500]; // 1s, 2.5s
+const RETRY_STATUS_CODES = [502, 503, 504];
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const config = error.config as RetryConfig;
+    if (!config) return Promise.reject(error);
+
+    const retryCount = config._retryCount || 0;
+
+    const status = error.response?.status;
+    const isNetworkError = !error.response && error.code !== 'ERR_CANCELED';
+    const isRetryableStatus = status !== undefined && RETRY_STATUS_CODES.includes(status);
+    const shouldRetry = (isNetworkError || isRetryableStatus) && retryCount < MAX_RETRIES;
+
+    if (shouldRetry) {
+      config._retryCount = retryCount + 1;
+      const delay = RETRY_DELAYS[retryCount] || 2500;
+      // eslint-disable-next-line no-console
+      console.log(`[api] Retrying request (${config._retryCount}/${MAX_RETRIES}) after ${delay}ms - status=${status ?? 'network'}`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return apiClient(config);
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 export const api = {
+  // Warmup — called on app launch to kill cold-start latency
+  warmup: async () => {
+    try {
+      const response = await apiClient.get('/warmup', { timeout: 10000 });
+      return response.data;
+    } catch (e) {
+      // Non-fatal — app continues even if warmup fails
+      // eslint-disable-next-line no-console
+      console.warn('[api] Warmup failed (non-fatal):', (e as Error).message);
+      return null;
+    }
+  },
+
+  healthCheck: async () => {
+    const response = await apiClient.get('/health', { timeout: 5000 });
+    return response.data;
+  },
+
   // App Install Tracking
   registerInstall: async (deviceId: string, platform: string = 'android', appVersion: string = '1.0.0') => {
     const response = await apiClient.post(`/app/register-install?device_id=${deviceId}&platform=${platform}&app_version=${appVersion}`);
@@ -117,3 +172,4 @@ export const api = {
     return response.data;
   },
 };
+
