@@ -321,6 +321,54 @@ backend:
     status_history:
       - working: true
         agent: "testing"
+        comment: "GET /api/warmup returns 200 in 0.37s with mongodb=warm. Well under 5s SLA. Works correctly for cold-start mitigation on production."
+
+  - task: "Improved Health Check"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "GET /api/health returns 200 always (never 503/500). Response includes status, timestamp, mongodb, llm_key_configured=true. Handles DB errors gracefully in response body instead of failing."
+
+  - task: "Startup event (DB indexes + pre-warm)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "All expected MongoDB indexes verified via mongosh: users.user_hash, users.id (unique), analyses.user_id+created_at, analyses.id (unique), app_installs.device_id (unique), feedback.user_id+created_at. Startup logs confirm 'MongoDB connection pool pre-warmed successfully' and 'MongoDB indexes ensured'."
+
+  - task: "LLM Resilience (retry with graceful fallback + ai_status flag)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "/api/travel-style (Japan/March/Vacation) returns 200 with ai_status='ok' and full payload. /api/chat returns 200 with ai_status='ok' and valid response. Fallback path with ai_status='fallback' kicks in only on double-retry failure. Two-phase retry (strict 20-25s → 35-40s) works as designed."
+
+  - task: "Warmup endpoint"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
         comment: "GET /api/warmup verified: returns 200 in ~0.37s (<5s requirement), body contains status='warm', timestamp, mongodb='warm'. Pool pre-warming works correctly."
 
   - task: "Improved Health Check"
