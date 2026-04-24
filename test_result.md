@@ -311,10 +311,58 @@ backend:
         agent: "testing"
         comment: "Complete password change flow tested successfully. All 7 test scenarios passed (100%): register user, change password with correct current password, login with old password fails (400), login with new password succeeds (200), change password with wrong current fails (400), change password with too short new password fails (400), change password with same old/new fails (400). All validation rules and security measures working correctly."
 
+  - task: "Warmup endpoint"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "GET /api/warmup verified: returns 200 in ~0.37s (<5s requirement), body contains status='warm', timestamp, mongodb='warm'. Pool pre-warming works correctly."
+
+  - task: "Improved Health Check"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "GET /api/health verified: returns 200 with status='healthy', mongodb='connected', timestamp, llm_key_configured=true. Never returns 503/500 — uses try/except around DB ping and reports degraded state in body instead."
+
+  - task: "Startup event (DB indexes + pre-warm)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "All expected indexes verified via mongosh: users (user_hash_1, id_1 unique), analyses (user_id_1_created_at_-1, id_1 unique), app_installs (device_id_1 unique), feedback (user_id_1_created_at_-1). Backend startup logs confirm 'MongoDB connection pool pre-warmed successfully' and 'MongoDB indexes ensured'. Idempotent on repeated startups."
+
+  - task: "LLM Resilience (retry with graceful fallback + ai_status flag)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "/api/travel-style (Japan, March, Vacation) returned 200 with ai_status='ok' and full recommendation payload. /api/chat returned 200 with ai_status='ok' and valid beauty response. llm_call_resilient helper correctly tags responses with 'ok'/'retried'/'fallback'. Fallback path includes fallback_message. Regression tests (register, check-email, password-login correct+wrong, change-password, new-password login, GET /api/analyses/{user_id}, POST /api/feedback) all passed — 14/14 tests green."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 3
+  test_sequence: 5
   run_ui: false
 
 test_plan:
@@ -338,3 +386,5 @@ agent_communication:
     message: "Analysis history functionality testing completed per specific review request. All core endpoints verified working: 1) User registration (200), 2) Empty history check returns proper array format (200), 3) analyze-skin endpoint exists and accepts requests (confirmed via curl), 4) GET /api/analyses/{user_id} returns proper array format (200), 5) GET /api/analysis/{analysis_id} properly returns 404 for non-existent IDs. Note: analyze-skin endpoint experiences delays due to OpenAI 502 errors in AI integration but endpoint exists, accepts requests correctly, and has proper fallback handling. All analysis history functionality working as expected."
   - agent: "testing"
     message: "Production readiness testing completed successfully. ALL 6 CORE TESTS PASSED (100% success rate). Key findings: 1) Health check with MongoDB verification working (200, 0.27s), 2) Connection pooling test passed - 5 rapid requests completed in 0.022s (well under 5s requirement), 3) Complete auth flow working: registration (200), password login (200), email check (200), 4) Error handling working: invalid login returns 400, invalid registration returns 400 with proper validation messages, 5) All endpoints respond quickly (<1s). Note: Chat endpoint experiences timeouts due to OpenAI 502 errors but this is external API issue, not backend issue. Backend is production-ready with proper MongoDB connection pooling, fast response times, and robust error handling."
+  - agent: "main"
+    message: "DEPLOYMENT HARDENING COMPLETE. Added the following production-grade resilience for the upcoming Emergent native deployment: (1) NEW /api/warmup endpoint that frontend calls on launch to pre-warm MongoDB pool and kill cold-start latency, (2) Startup event that pre-warms Mongo on boot + creates indexes (users.user_hash, users.id, analyses.user_id+created_at, analyses.id, app_installs.device_id, feedback.user_id+created_at) — all idempotent, (3) Improved /api/health endpoint returns 200 always (never kills pod on transient DB issues) with mongodb + llm_key_configured flags, (4) New llm_call_resilient() helper: strict first timeout (20-25s) then retry with longer timeout (35-40s) — applied to analyze_skin_with_ai, /travel-style, /chat. All LLM responses now include ai_status flag ('ok'/'retried'/'fallback') so UI can indicate when fallback is used, (5) Added MongoDB heartbeatFrequencyMS=10000 + waitQueueTimeoutMS=5000 for pool robustness, (6) EMERGENT_LLM_KEY startup warning if missing. FRONTEND: (1) Axios interceptor with auto-retry on 502/503/504/network errors (2 retries, exponential backoff 1s→2.5s), (2) api.warmup() called in root _layout.tsx on app launch, (3) EXPO_PACKAGER_PROXY_URL added to frontend/.env, (4) .gitignore cleaned up (removed duplicate .env rules). Deployment Agent health check: PASS. Backend restarted cleanly — startup logs confirm 'MongoDB connection pool pre-warmed successfully' and 'MongoDB indexes ensured'. Please test: /api/warmup, /api/health, analyze-skin with ai_status flag, travel-style with ai_status flag, chat with ai_status flag, and verify existing auth+analyses flow still works end-to-end."
