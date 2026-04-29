@@ -1,140 +1,133 @@
-# MAK — Play Store Copy & Friend Share Message
+# MAK — Play Store Copy & Friend Share Message (v2 — FINAL)
 
-All copy is ready to paste. Human tone, no AI mentions anywhere.
-
----
-
-## 🏷️ APP TITLE (30 chars max)
-
-```
-MAK — Your Makeup Buddy
-```
-(22 chars)
-
-Alternative:
-- `MAK: Skincare & Makeup Buddy` (28 chars)
-- `MAK — Beauty, Yours` (18 chars — minimal)
+All copy below uses your chosen wording. Human tone, no AI mentions.
 
 ---
 
-## 📝 SHORT DESCRIPTION (80 chars max — shown in search results)
+## 🏷️ APP NAME (in `app.json`, shows under home screen icon)
 
-**Recommended:**
 ```
-Your personalized makeup buddy. Skin care, glam looks & travel-ready styles.
+MAK - Personalized Styling & Makeup
 ```
-(78 chars)
-
-Alternatives:
-- `Personalized makeup & skincare picks, plus travel looks made just for you.` (75 chars)
-- `Skincare tips, makeup picks & travel styling — tailored to your unique vibe.` (76 chars)
+(35 chars — already updated in `/app/frontend/app.json`)
 
 ---
 
-## 📖 FULL DESCRIPTION (up to 4000 chars)
+## 📛 PLAY CONSOLE TITLE (30 chars max)
 
 ```
-Meet MAK — your personalized makeup buddy. 💄✨
-
-Ever stared into your closet or makeup drawer and wondered "what actually works for ME?" MAK is the friend who gets it. Snap a selfie, tell us where you're headed, and get thoughtful, personalized recommendations that match YOUR skin, YOUR features, and YOUR mood — no guesswork, no one-size-fits-all advice.
-
-🌸 SKIN CARE, PERSONALIZED
-Get a gentle, honest read on your skin type, tone, and texture — along with a routine tailored to what your skin actually needs. Cleanser, serum, moisturizer, SPF, weekly treatments — all chosen for you.
-
-💋 MAKEUP THAT FEELS LIKE YOU
-Foundation shade match. Blush that flatters your undertone. Lip colors that light you up. Eye looks for your eye shape. Contour placement for your face shape. It's like having a makeup artist on speed dial.
-
-🌍 TRAVEL STYLE ASSISTANT
-Jetting off to Paris in June? Mumbai in December? Tokyo for a wedding? MAK knows the weather, the vibe, and the cultural nuances of your destination — and curates outfit and makeup suggestions so you arrive feeling effortless, not over-packed.
-
-💬 ASK MAK ANYTHING
-A quick chat with your beauty buddy. "What lipstick suits fair skin?" "Best hairstyle for a round face?" "How do I layer serums?" — ask away, get friendly, practical answers in seconds.
-
-📚 YOUR HISTORY, YOUR WAY
-Every analysis is saved so you can revisit past recommendations, compare looks over time, and build a library of what works for you.
-
-✨ WHY MAK?
-• Personalized — every suggestion is tailored to your unique features
-• Private — no personal data shared with third parties, ever
-• Simple — no endless forms, no fluff, just what you need
-• Pretty — gentle pink, mint, and lavender theme that's a joy to use
-• Safe — bcrypt-encrypted passwords, HTTPS, 48-hour session expiry
-
-Whether you're a makeup pro looking for fresh inspiration, or someone just starting out and feeling overwhelmed — MAK meets you where you are, with zero judgment and plenty of warmth.
-
-🌺 WHAT'S INSIDE?
-→ Skin tone, undertone & face shape analysis
-→ Tailored foundation, concealer, and contour picks
-→ Eye makeup for your eye shape
-→ Lip colors matched to your complexion
-→ Skincare routines for your skin type
-→ Travel-ready outfit & makeup plans for any destination & occasion
-→ Privacy-first design — minimal data, maximum care
-
-Download, sign up with just your email, and let's find your signature look. 💖
-
----
-Privacy first. Built with love. Made for you.
+MAK - Skincare, Makeup & Style
 ```
-
-(1,970 chars — plenty of room to edit)
+(30 chars exactly — your final pick)
 
 ---
 
-## 🌟 WHAT'S NEW (release notes for first version)
+## 📝 SHORT DESCRIPTION (80 chars max)
 
 ```
-Hello world! 🌸 MAK v1.0 is here:
-• Personalized skincare routines tailored to your skin type
-• Makeup recommendations matched to your features & undertone
-• Travel Style mode — outfit & beauty picks for any destination
+Personalized skincare, makeup & travel-ready styles just for you
+```
+(64 chars — your final pick, with cleanup of the typo)
+
+---
+
+## 📖 FULL DESCRIPTION (4000 chars max)
+
+```
+MAK — your personal styling and beauty companion. ✨
+
+Tired of generic beauty advice that doesn't quite fit YOU? MAK is built differently. It's a smart, gentle little app that helps you discover skincare, makeup, and styling that actually work for your unique features, lifestyle, and mood. Like having a beauty-savvy best friend in your pocket — minus the judgment.
+
+🌸 SKINCARE THAT GETS YOU
+Snap a quick selfie and get a thoughtful read on your skin type, tone, and texture. Then receive a routine tailored to what YOUR skin actually needs — cleanser, serum, moisturizer, SPF, weekly treatments. No more guessing, no more wasted products.
+
+💄 MAKEUP MADE PERSONAL
+From foundation shade to lip color, MAK helps you find what flatters YOUR features — undertone-matched blush, eye looks for your eye shape, contour placement for your face shape, lipsticks that light you up. It's like a glam squad consultation, on demand.
+
+🌍 TRAVEL & EVENT STYLING
+Heading to Paris in spring? Mumbai monsoon? A Tokyo wedding? MAK considers the actual climate, culture, and occasion of your destination — and curates outfit + makeup picks so you arrive feeling effortless, not over-packed. Daywear to evening, casual to formal.
+
+💬 ASK MAK — YOUR ON-DEMAND BEAUTY BUDDY
+Got a quick beauty question? Just ask. "What lipstick suits warm undertones?" "How do I layer serums?" "Best hairstyle for round faces?" — get friendly, practical answers in seconds.
+
+📚 YOUR BEAUTY HISTORY, CURATED
+Every recommendation is saved to your private history so you can revisit looks, track what works, and build YOUR signature style over time.
+
+✨ WHY YOU'LL LOVE MAK
+• Truly personalized — not one-size-fits-all
+• Privacy-first — minimal data, never shared with third parties
+• Beautifully simple — pastel-pretty design, zero fluff
+• All-in-one — skincare + makeup + styling, finally together
+• Always free to start
+
+🎀 PERFECT FOR
+You, if you've ever:
+• Bought the wrong foundation shade (we've all been there 😅)
+• Felt overwhelmed by skincare ingredient lists
+• Packed for a trip and arrived totally overdressed (or under)
+• Wished someone could just TELL you what to wear
+• Wanted beauty advice without the influencer pressure
+
+🌺 INSIDE THE APP
+→ Skin type, tone & undertone analysis
+→ Face shape & feature-aware makeup picks
+→ Climate-smart travel outfit + makeup planning
+→ Curated beauty looks (Glass Skin, Dewy Glow, Soft Glam, and more)
+→ Friendly chat with your in-app beauty buddy
+→ Save & revisit your favorite recommendations
+→ Light & dark mode — gentle on the eyes
+
+📱 BUILT FOR REAL LIFE
+Quick, lightweight, and designed to feel like a moment of self-care — not another notification-heavy app cluttering your life.
+
+🔒 PRIVACY YOU CAN TRUST
+We collect only what's needed (your email + display name). Photos you share are processed for analysis and never stored. Read our full privacy policy in the Profile section. Your beauty journey is YOURS.
+
+—
+
+Download MAK today and let's find what makes you feel like the most YOU version of yourself. ✨
+
+We're listening — got a feature request or feedback? Tap "Contact us" inside the app. We're real humans on the other end. 💖
+```
+
+(~3,150 chars / 4,000 max)
+
+---
+
+## 🌟 WHAT'S NEW (release notes for v1.0)
+
+```
+MAK — your personal styling and beauty companion.
+
+Welcome to v1.0:
+• Personalized skincare routines tailored to your skin type, tone & texture
+• Makeup picks matched to your features, undertone & face shape
+• Travel Style mode — destination & occasion-aware outfit + makeup planning
 • Ask MAK — your friendly beauty chat companion
-• Private by design — your data stays yours
+• Light & dark mode for any time of day
+• Privacy-first, gentle, easy to use
 
-Have a request? We're listening.
+Send feedback through the app — we're listening. 💖
 ```
 
 ---
 
-## 🔍 KEYWORDS / TAGS (for search optimization)
+## 🔍 ASO KEYWORDS / TAGS
 
-Primary (high-intent):
-- makeup
-- skincare
-- beauty
-- makeup app
-- skin analysis
-- personalized beauty
+```
+skincare routine • lipstick shade finder • foundation match • beauty buddy •
+outfit planner • travel style • fashion • beauty tips • skin analysis •
+glam looks
+```
 
-Secondary (reach):
-- makeup tips
-- beauty assistant
-- travel style
-- outfit planner
-- lipstick shade
-- foundation match
-- skincare routine
-
-Category: `Beauty`  
-Tags: `Beauty`, `Lifestyle`
+**Play Store Category:** Beauty  
+**Play Store Tags:** Beauty, Lifestyle
 
 ---
 
-## 🎨 FEATURE GRAPHIC (1024×500px banner, top of store page)
+## 💌 FRIEND SHARE MESSAGE (3 versions — pick what fits)
 
-Suggested design brief:
-- **Background:** Pastel gradient (pink → mint → lavender)
-- **Left side:** App icon/logo (the MAK wordmark)
-- **Center/Right:** Tagline "Your Personalized Makeup Buddy 💄✨"
-- **Subtext:** "Skincare. Makeup. Travel Style."
-- **Style:** Soft, feminine, playful — NOT clinical
-- Tools to build: Canva (free template "Play Store Feature Graphic") or Figma
-
----
-
-## 📧 MESSAGE TO SHARE WITH FRIENDS (for feedback)
-
-### Option 1: Warm & Personal (recommended)
+### Option 1 — Warm & Personal (recommended)
 
 ```
 Hey! 🌸
@@ -154,7 +147,7 @@ Just tap the link below, sign up with your email, and take a quick selfie or exp
 Takes 5 min tops. Grateful in advance! 💕
 ```
 
-### Option 2: Short & Casual
+### Option 2 — Short & Casual
 
 ```
 Hey! Built a little beauty app — MAK. Personalized skincare, makeup, and travel-style picks.
@@ -166,12 +159,12 @@ Link: [APP LINK HERE]
 Any thoughts / complaints / ideas — send them my way!
 ```
 
-### Option 3: Playful (for close friends)
+### Option 3 — Playful (close friends)
 
 ```
 Ok so here's a thing 👀
 
-I made a beauty app called MAK — it's like having a makeup-savvy friend in your pocket. Tell it your destination or skin concern, get actual useful suggestions back.
+I made a beauty app called MAK — it's like having a beauty-savvy friend in your pocket. Tell it your destination or skin concern, get actual useful suggestions back.
 
 Early version, and I really need YOUR eyes on it before I ship it to the world. Would you take it for a spin and tell me where I went wrong (or right)?
 
@@ -182,27 +175,15 @@ P.S. I'll love you forever. 💖
 
 ---
 
-## 📧 EMAIL SUPPORT / CONTACT
+## ✅ Checklist Before Submitting to Play Store
 
-You'll need a support email for the Play Store listing. Options:
-- Use a Gmail: `makbuddy.support@gmail.com` (free, takes 2 min to create)
-- Use a personal email temporarily
-
----
-
-## ✅ CHECKLIST BEFORE SUBMITTING TO PLAY STORE
-
-- [ ] Privacy policy hosted on a public URL (see privacy-policy.html)
-- [ ] Support email set up
-- [ ] App title, short desc, full desc pasted
-- [ ] At least 2 screenshots uploaded (min 320px, ideally 1080px+)
-- [ ] Feature graphic designed (1024×500)
-- [ ] App icon (512×512) — you already have it
+- [ ] Privacy policy hosted on a public URL (use `privacy-policy.html`)
+- [ ] Support email set up (Gmail like `makbuddy.support@gmail.com` works)
+- [ ] App title, short desc, full desc pasted into Play Console
+- [ ] At least 2 screenshots uploaded
+- [ ] Feature graphic designed (1024×500) or skipped initially
+- [ ] App icon (512×512) uploaded — pick from `/app/deliverables/icons/`
 - [ ] Content rating questionnaire completed
-- [ ] Data safety form filled (select "No data collected" for most items)
+- [ ] Data safety form filled (mostly "no data collected")
 - [ ] Category: Beauty
-- [ ] Target age: 13+
-
----
-
-Done! Everything's ready to paste. Let me know when your Railway backend is live and I'll help you swap the URL.
+- [ ] Target audience: 13+
