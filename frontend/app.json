@@ -48,7 +48,8 @@
         {
           "photosPermission": "Allow MAK to access your photos for skin analysis"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
