@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { api } from '../src/services/api';
 type Step = 'email' | 'signin' | 'register';
 
 const sanitize = (text: string) => text.replace(/<[^>]*>|javascript:|on\w+=/gi, '');
+const SUPPORT_EMAIL = 'support@makbuddy.app';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -77,6 +78,31 @@ export default function LoginScreen() {
     setStep('email');
   };
 
+  const handleForgotPassword = async () => {
+    const e = email.trim().toLowerCase();
+    const subject = 'Password Reset Request — MAK';
+    const body = `Hi MAK Support team,\n\nI'd like to reset my password for the account: ${e || '[your email]'}\n\nPlease assist.\n\nThanks!`;
+    const mailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    try {
+      const can = await Linking.canOpenURL(mailto);
+      if (can) {
+        await Linking.openURL(mailto);
+      } else {
+        Alert.alert(
+          'Reset Your Password',
+          `Please email us at ${SUPPORT_EMAIL} from your registered email and we'll help you reset your password within 24 hours.`,
+          [{ text: 'Got it', style: 'default' }]
+        );
+      }
+    } catch {
+      Alert.alert(
+        'Reset Your Password',
+        `Please email us at ${SUPPORT_EMAIL} and we'll help you reset your password within 24 hours.`,
+        [{ text: 'Got it', style: 'default' }]
+      );
+    }
+  };
+
   return (
     <SafeAreaView style={[st.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={st.kv}>
@@ -120,6 +146,9 @@ export default function LoginScreen() {
                 </View>
                 <TouchableOpacity style={[st.btn, { backgroundColor: colors.primary }]} onPress={handleSignIn} disabled={loading}>
                   {loading ? <ActivityIndicator color="#FFF" /> : <Text style={st.btnText}>Sign In</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleForgotPassword} style={st.forgotRow} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={[st.forgotText, { color: colors.primary }]}>Forgot password?</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -179,5 +208,7 @@ const st = StyleSheet.create({
   backText: { fontSize: 14, fontWeight: '600' },
   errRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: 'rgba(232,93,117,0.08)' },
   errText: { flex: 1, fontSize: 13 },
+  forgotRow: { alignItems: 'center', marginTop: 14, paddingVertical: 6 },
+  forgotText: { fontSize: 13, fontWeight: '600' },
   privacy: { fontSize: 11, textAlign: 'center', marginTop: 20 },
 });

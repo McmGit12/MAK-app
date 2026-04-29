@@ -32,7 +32,7 @@ const QUICK_PILLS = [
   'Tips for glowing skin',
 ];
 
-export default function AskMakChatbot() {
+export default function AskMakChatbot({ tabBarHeight = 70 }: { tabBarHeight?: number }) {
   const { colors } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -182,8 +182,8 @@ export default function AskMakChatbot() {
         </Animated.View>
       )}
 
-      {/* FAB Button */}
-      <Animated.View style={[styles.fabContainer, { transform: [{ scale: isOpen ? 1 : bounceAnim }] }]}>
+      {/* FAB Button — positioned ABOVE the tab bar so it doesn't overlap navigation */}
+      <Animated.View style={[styles.fabContainer, { bottom: tabBarHeight + 16, transform: [{ scale: isOpen ? 1 : bounceAnim }] }]}>
         <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={toggleChat} activeOpacity={0.8}>
           {isOpen ? (
             <Ionicons name="close" size={24} color="#FFF" />
@@ -201,7 +201,7 @@ export default function AskMakChatbot() {
 
 const styles = StyleSheet.create({
   // FAB
-  fabContainer: { position: 'absolute', bottom: 90, right: 16, alignItems: 'flex-end', zIndex: 998 },
+  fabContainer: { position: 'absolute', right: 16, alignItems: 'flex-end', zIndex: 998 },
   fab: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 6 },
   fabInner: { alignItems: 'center', gap: 1 },
   fabText: { color: '#FFF', fontSize: 8, fontWeight: '700', letterSpacing: 0.5 },

@@ -2,6 +2,7 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useAuth } from '../../src/context/AuthContext';
 import AskMakChatbot from '../../src/components/AskMakChatbot';
@@ -10,6 +11,7 @@ import LoginScreen from '../index';
 export default function TabsLayout() {
   const { colors } = useTheme();
   const { user, loading } = useAuth();
+  const insets = useSafeAreaInsets();
 
   // Show loading while checking auth
   if (loading) {
@@ -25,6 +27,11 @@ export default function TabsLayout() {
     return <LoginScreen />;
   }
 
+  // Add bottom safe-area inset so the tab bar sits ABOVE the Android gesture area
+  // (3-button nav, gesture pill, etc). Minimum 12 to ensure room on phones without insets.
+  const bottomInset = Math.max(insets.bottom, 12);
+  const tabBarHeight = 60 + bottomInset;
+
   return (
     <View style={{ flex: 1 }}>
       <Tabs
@@ -34,13 +41,14 @@ export default function TabsLayout() {
           backgroundColor: colors.tabBar,
           borderTopColor: colors.tabBarBorder,
           borderTopWidth: 1,
-          height: 70,
+          height: tabBarHeight,
           paddingTop: 8,
-          paddingBottom: 12,
+          paddingBottom: bottomInset,
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textTertiary,
         tabBarLabelStyle: styles.tabLabel,
+        tabBarItemStyle: { paddingVertical: 4 },
       }}
     >
       <Tabs.Screen
@@ -83,7 +91,7 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
-      <AskMakChatbot />
+      <AskMakChatbot tabBarHeight={tabBarHeight} />
     </View>
   );
 }
