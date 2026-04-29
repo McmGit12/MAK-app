@@ -398,6 +398,42 @@ backend:
         agent: "testing"
         comment: "/api/travel-style (Japan/March/Vacation) returns 200 with ai_status='ok' and full payload. /api/chat returns 200 with ai_status='ok' and valid response. Fallback path with ai_status='fallback' kicks in only on double-retry failure. Two-phase retry (strict 20-25s → 35-40s) works as designed."
 
+  - task: "Bottom tab safe-area + tab navigation works on mobile"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/(tabs)/_layout.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Verified at 412x915 mobile viewport (Pixel 7). useSafeAreaInsets() adds bottomInset (min 12px) to paddingBottom and height. Home/Profile/History tabs all navigate correctly when tapped. Tab bar sits 75px+ above viewport bottom — no overlap with system gesture area. CRITICAL fix for user-reported bug where taps did nothing on real Android device."
+
+  - task: "Ask MAK FAB no overlap with tab bar"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/AskMakChatbot.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "FAB now uses dynamic bottom={tabBarHeight + 16} prop instead of hardcoded bottom:90. Verified 75px gap between FAB bottom and tab bar top. FAB is fully visible and tappable, chat panel opens correctly."
+
+  - task: "Forgot Password link on Sign In step opens email composer"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/index.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "'Forgot password?' link visible in pink/primary color on the Sign In step, below the Sign In button. Tapping triggers Linking.openURL with mailto:support@makbuddy.app and subject prefilled. If mailto fails, falls back to Alert with instructions. Verified working at 412x915 mobile viewport."
+
   - task: "Warmup endpoint"
     implemented: true
     working: true
