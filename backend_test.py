@@ -7,7 +7,7 @@ import time
 import json
 import sys
 
-BASE_URL = "https://complexion-fit.preview.emergentagent.com/api"
+BASE_URL = "https://makeup-buddy-preview.preview.emergentagent.com/api"
 GENERIC_ERR = "Sorry we are experiencing issues, please try again in some time."
 
 results = []

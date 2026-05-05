@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 # Configuration
-BASE_URL = "https://complexion-fit.preview.emergentagent.com/api"
+BASE_URL = "https://makeup-buddy-preview.preview.emergentagent.com/api"
 
 class MAKBackendTester:
     def __init__(self):
