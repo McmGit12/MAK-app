@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput, FlatList, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -6,10 +6,10 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Image } from 'expo-image';
+import { Country, State, City, ICountry, IState, ICity } from 'country-state-city';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
 import { api } from '../../src/services/api';
-import { getStates, getCities } from '../../src/data/locations';
 import { MakErrorSheet, MakErrorVariant } from '../../src/components/MakErrorSheet';
 import { MakLoadingRotator } from '../../src/components/MakLoadingRotator';
 import { MakInfoBanner } from '../../src/components/MakInfoBanner';
@@ -18,24 +18,6 @@ import { mapErrorToVariant, AnalyzeMode as LoadingMode } from '../../src/constan
 type Mode = 'skin_care' | 'makeup' | 'travel';
 
 const DISCLAIMER = 'We respect your privacy and do not store any personal data. Results are for informational purposes only — try at your own discretion.';
-
-const COUNTRIES = [
-  { name: 'United States', flag: '\u{1F1FA}\u{1F1F8}' }, { name: 'United Kingdom', flag: '\u{1F1EC}\u{1F1E7}' },
-  { name: 'India', flag: '\u{1F1EE}\u{1F1F3}' }, { name: 'France', flag: '\u{1F1EB}\u{1F1F7}' },
-  { name: 'Italy', flag: '\u{1F1EE}\u{1F1F9}' }, { name: 'Japan', flag: '\u{1F1EF}\u{1F1F5}' },
-  { name: 'Australia', flag: '\u{1F1E6}\u{1F1FA}' }, { name: 'Germany', flag: '\u{1F1E9}\u{1F1EA}' },
-  { name: 'Canada', flag: '\u{1F1E8}\u{1F1E6}' }, { name: 'Brazil', flag: '\u{1F1E7}\u{1F1F7}' },
-  { name: 'Spain', flag: '\u{1F1EA}\u{1F1F8}' }, { name: 'Mexico', flag: '\u{1F1F2}\u{1F1FD}' },
-  { name: 'Thailand', flag: '\u{1F1F9}\u{1F1ED}' }, { name: 'UAE', flag: '\u{1F1E6}\u{1F1EA}' },
-  { name: 'Singapore', flag: '\u{1F1F8}\u{1F1EC}' }, { name: 'South Korea', flag: '\u{1F1F0}\u{1F1F7}' },
-  { name: 'Turkey', flag: '\u{1F1F9}\u{1F1F7}' }, { name: 'Greece', flag: '\u{1F1EC}\u{1F1F7}' },
-  { name: 'Indonesia', flag: '\u{1F1EE}\u{1F1E9}' }, { name: 'South Africa', flag: '\u{1F1FF}\u{1F1E6}' },
-  { name: 'Egypt', flag: '\u{1F1EA}\u{1F1EC}' }, { name: 'Switzerland', flag: '\u{1F1E8}\u{1F1ED}' },
-  { name: 'Netherlands', flag: '\u{1F1F3}\u{1F1F1}' }, { name: 'Portugal', flag: '\u{1F1F5}\u{1F1F9}' },
-  { name: 'Sweden', flag: '\u{1F1F8}\u{1F1EA}' }, { name: 'New Zealand', flag: '\u{1F1F3}\u{1F1FF}' },
-  { name: 'China', flag: '\u{1F1E8}\u{1F1F3}' }, { name: 'Russia', flag: '\u{1F1F7}\u{1F1FA}' },
-  { name: 'Argentina', flag: '\u{1F1E6}\u{1F1F7}' }, { name: 'Colombia', flag: '\u{1F1E8}\u{1F1F4}' },
-];
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -63,9 +45,11 @@ export default function AnalyzeScreen() {
   const [cameraMode, setCameraMode] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
-  // Travel state
-  const [selectedCountry, setSelectedCountry] = useState('');
-  const [selectedState, setSelectedState] = useState('');
+  // Travel state — using country-state-city library (ISO codes for state/city lookup)
+  const [selectedCountry, setSelectedCountry] = useState('');       // display name
+  const [selectedCountryCode, setSelectedCountryCode] = useState(''); // isoCode (e.g. 'IN', 'CA')
+  const [selectedState, setSelectedState] = useState('');           // display name
+  const [selectedStateCode, setSelectedStateCode] = useState('');   // isoCode
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedOccasion, setSelectedOccasion] = useState('');
@@ -74,6 +58,8 @@ export default function AnalyzeScreen() {
   const [showCityPicker, setShowCityPicker] = useState(false);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
+  const [stateSearch, setStateSearch] = useState('');
+  const [citySearch, setCitySearch] = useState('');
   const [travelResult, setTravelResult] = useState<any>(null);
   const [travelLoading, setTravelLoading] = useState(false);
   // Error sheet state — replaces Alert.alert("Oops!", ...)
@@ -87,9 +73,39 @@ export default function AnalyzeScreen() {
     api.warmup().catch(() => {});
   }, []);
 
-  const filteredCountries = COUNTRIES.filter(c => c.name.toLowerCase().includes(countrySearch.toLowerCase()));
-  const availableStates = selectedCountry ? getStates(selectedCountry) : [];
-  const availableCities = (selectedCountry && selectedState) ? getCities(selectedCountry, selectedState) : [];
+  // All countries loaded once from country-state-city library (~250 countries).
+  // Memoized so sorting only happens once per component lifetime.
+  const allCountries: ICountry[] = useMemo(() => {
+    return Country.getAllCountries().sort((a, b) => a.name.localeCompare(b.name));
+  }, []);
+
+  const filteredCountries = useMemo(() => {
+    const q = countrySearch.trim().toLowerCase();
+    if (!q) return allCountries;
+    return allCountries.filter((c) => c.name.toLowerCase().includes(q));
+  }, [countrySearch, allCountries]);
+
+  const availableStates: IState[] = useMemo(() => {
+    if (!selectedCountryCode) return [];
+    return State.getStatesOfCountry(selectedCountryCode).sort((a, b) => a.name.localeCompare(b.name));
+  }, [selectedCountryCode]);
+
+  const filteredStates = useMemo(() => {
+    const q = stateSearch.trim().toLowerCase();
+    if (!q) return availableStates;
+    return availableStates.filter((s) => s.name.toLowerCase().includes(q));
+  }, [stateSearch, availableStates]);
+
+  const availableCities: ICity[] = useMemo(() => {
+    if (!selectedCountryCode || !selectedStateCode) return [];
+    return City.getCitiesOfState(selectedCountryCode, selectedStateCode).sort((a, b) => a.name.localeCompare(b.name));
+  }, [selectedCountryCode, selectedStateCode]);
+
+  const filteredCities = useMemo(() => {
+    const q = citySearch.trim().toLowerCase();
+    if (!q) return availableCities;
+    return availableCities.filter((c) => c.name.toLowerCase().includes(q));
+  }, [citySearch, availableCities]);
 
   const pickImage = async () => {
     try {
@@ -297,7 +313,7 @@ export default function AnalyzeScreen() {
               <Text style={[s.pickerLabel, { color: colors.textSecondary }]}>Destination Country</Text>
               <View style={s.pickerValue}>
                 {selectedCountry ? (
-                  <Text style={[s.pickerText, { color: colors.text }]}>{COUNTRIES.find(c => c.name === selectedCountry)?.flag}  {selectedCountry}</Text>
+                  <Text style={[s.pickerText, { color: colors.text }]}>{allCountries.find(c => c.name === selectedCountry)?.flag || ''}  {selectedCountry}</Text>
                 ) : (
                   <Text style={[s.pickerPlaceholder, { color: colors.textTertiary }]}>Select a country...</Text>
                 )}
@@ -305,20 +321,20 @@ export default function AnalyzeScreen() {
               </View>
             </TouchableOpacity>
 
-            {/* State Picker */}
-            <TouchableOpacity style={[s.pickerBtn, { backgroundColor: colors.surface, borderColor: colors.borderLight, opacity: selectedCountry ? 1 : 0.5 }]} onPress={() => { if (selectedCountry) setShowStatePicker(true); else Alert.alert('Select Country', 'Please select a country first.'); }} disabled={!selectedCountry}>
-              <Text style={[s.pickerLabel, { color: colors.textSecondary }]}>State / Region</Text>
+            {/* State Picker (optional — skipped if country has no states) */}
+            <TouchableOpacity style={[s.pickerBtn, { backgroundColor: colors.surface, borderColor: colors.borderLight, opacity: selectedCountry ? 1 : 0.5 }]} onPress={() => { if (!selectedCountry) { Alert.alert('Select Country', 'Please select a country first.'); return; } if (availableStates.length === 0) { Alert.alert('No States', 'This country doesn\u2019t have state divisions. We\u2019ll style based on the country.'); return; } setShowStatePicker(true); }} disabled={!selectedCountry}>
+              <Text style={[s.pickerLabel, { color: colors.textSecondary }]}>State / Region <Text style={{ color: colors.textTertiary }}>(optional)</Text></Text>
               <View style={s.pickerValue}>
-                <Text style={[selectedState ? s.pickerText : s.pickerPlaceholder, { color: selectedState ? colors.text : colors.textTertiary }]}>{selectedState || 'Select state...'}</Text>
+                <Text style={[selectedState ? s.pickerText : s.pickerPlaceholder, { color: selectedState ? colors.text : colors.textTertiary }]}>{selectedState || (availableStates.length === 0 && selectedCountry ? 'Not available' : 'Select state...')}</Text>
                 <Ionicons name="chevron-down" size={18} color={colors.textTertiary} />
               </View>
             </TouchableOpacity>
 
-            {/* City Picker */}
-            <TouchableOpacity style={[s.pickerBtn, { backgroundColor: colors.surface, borderColor: colors.borderLight, opacity: selectedState ? 1 : 0.5 }]} onPress={() => { if (selectedState) setShowCityPicker(true); else Alert.alert('Select State', 'Please select a state first.'); }} disabled={!selectedState}>
-              <Text style={[s.pickerLabel, { color: colors.textSecondary }]}>City</Text>
+            {/* City Picker (optional) */}
+            <TouchableOpacity style={[s.pickerBtn, { backgroundColor: colors.surface, borderColor: colors.borderLight, opacity: selectedState ? 1 : 0.5 }]} onPress={() => { if (!selectedState) { Alert.alert('Select State', 'Please select a state/region first, or skip — we can style based on country alone.'); return; } if (availableCities.length === 0) { Alert.alert('No Cities', 'This region doesn\u2019t have city data. We\u2019ll style based on the state.'); return; } setShowCityPicker(true); }} disabled={!selectedState}>
+              <Text style={[s.pickerLabel, { color: colors.textSecondary }]}>City <Text style={{ color: colors.textTertiary }}>(optional)</Text></Text>
               <View style={s.pickerValue}>
-                <Text style={[selectedCity ? s.pickerText : s.pickerPlaceholder, { color: selectedCity ? colors.text : colors.textTertiary }]}>{selectedCity || 'Select city...'}</Text>
+                <Text style={[selectedCity ? s.pickerText : s.pickerPlaceholder, { color: selectedCity ? colors.text : colors.textTertiary }]}>{selectedCity || (availableCities.length === 0 && selectedState ? 'Not available' : 'Select city...')}</Text>
                 <Ionicons name="chevron-down" size={18} color={colors.textTertiary} />
               </View>
             </TouchableOpacity>
@@ -345,10 +361,9 @@ export default function AnalyzeScreen() {
 
             {/* Get Suggestions Button */}
             {(() => {
+              // Required: Country + Month + Occasion. State/City are optional (some countries have no states).
               const missing = [];
               if (!selectedCountry) missing.push('Country');
-              if (!selectedState) missing.push('State');
-              if (!selectedCity) missing.push('City');
               if (!selectedMonth) missing.push('Month');
               if (!selectedOccasion) missing.push('Occasion');
               const canSubmit = missing.length === 0;
@@ -413,19 +428,40 @@ export default function AnalyzeScreen() {
           <View style={[s.modalContent, { backgroundColor: colors.background }]}>
             <View style={s.modalHeader}>
               <Text style={[s.modalTitle, { color: colors.text }]}>Select Country</Text>
-              <TouchableOpacity onPress={() => setShowCountryPicker(false)}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowCountryPicker(false); setCountrySearch(''); }}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
             </View>
             <View style={[s.searchBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
               <Ionicons name="search" size={18} color={colors.textTertiary} />
               <TextInput style={[s.searchInput, { color: colors.text }]} placeholder="Search countries..." placeholderTextColor={colors.textTertiary} value={countrySearch} onChangeText={setCountrySearch} />
             </View>
-            <FlatList data={filteredCountries} keyExtractor={i => i.name} renderItem={({ item }) => (
-              <TouchableOpacity style={[s.countryRow, { borderBottomColor: colors.borderLight }]} onPress={() => { setSelectedCountry(item.name); setSelectedState(''); setSelectedCity(''); setShowCountryPicker(false); setCountrySearch(''); }}>
-                <Text style={s.countryFlag}>{item.flag}</Text>
-                <Text style={[s.countryName, { color: colors.text }]}>{item.name}</Text>
-                {selectedCountry === item.name && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
-              </TouchableOpacity>
-            )} />
+            <FlatList
+              data={filteredCountries}
+              keyExtractor={(i) => i.isoCode}
+              keyboardShouldPersistTaps="handled"
+              initialNumToRender={20}
+              windowSize={10}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[s.countryRow, { borderBottomColor: colors.borderLight }]}
+                  onPress={() => {
+                    setSelectedCountry(item.name);
+                    setSelectedCountryCode(item.isoCode);
+                    // Reset state/city when country changes
+                    setSelectedState('');
+                    setSelectedStateCode('');
+                    setSelectedCity('');
+                    setStateSearch('');
+                    setCitySearch('');
+                    setShowCountryPicker(false);
+                    setCountrySearch('');
+                  }}
+                >
+                  <Text style={s.countryFlag}>{item.flag}</Text>
+                  <Text style={[s.countryName, { color: colors.text }]}>{item.name}</Text>
+                  {selectedCountry === item.name && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+                </TouchableOpacity>
+              )}
+            />
           </View>
         </View>
       </Modal>
@@ -454,15 +490,44 @@ export default function AnalyzeScreen() {
           <View style={[s.modalContent, { backgroundColor: colors.background, maxHeight: 420 }]}>
             <View style={s.modalHeader}>
               <Text style={[s.modalTitle, { color: colors.text }]}>Select State / Region</Text>
-              <TouchableOpacity onPress={() => setShowStatePicker(false)}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowStatePicker(false); setStateSearch(''); }}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
             </View>
-            <FlatList data={availableStates} keyExtractor={i => i} renderItem={({ item }) => (
-              <TouchableOpacity style={[s.countryRow, { borderBottomColor: colors.borderLight }]} onPress={() => { setSelectedState(item); setSelectedCity(''); setShowStatePicker(false); }}>
-                <Ionicons name="location-outline" size={20} color={colors.secondary} />
-                <Text style={[s.countryName, { color: colors.text }]}>{item}</Text>
-                {selectedState === item && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
-              </TouchableOpacity>
-            )} />
+            <View style={[s.searchBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Ionicons name="search" size={18} color={colors.textTertiary} />
+              <TextInput style={[s.searchInput, { color: colors.text }]} placeholder="Search states..." placeholderTextColor={colors.textTertiary} value={stateSearch} onChangeText={setStateSearch} />
+            </View>
+            {availableStates.length === 0 ? (
+              <View style={s.emptyListWrap}>
+                <Ionicons name="information-circle-outline" size={28} color={colors.textTertiary} />
+                <Text style={[s.emptyListText, { color: colors.textSecondary }]}>No states available for this country. You can still style by country alone.</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={filteredStates}
+                keyExtractor={(i) => i.isoCode}
+                keyboardShouldPersistTaps="handled"
+                initialNumToRender={20}
+                windowSize={10}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[s.countryRow, { borderBottomColor: colors.borderLight }]}
+                    onPress={() => {
+                      setSelectedState(item.name);
+                      setSelectedStateCode(item.isoCode);
+                      // Reset city when state changes
+                      setSelectedCity('');
+                      setCitySearch('');
+                      setShowStatePicker(false);
+                      setStateSearch('');
+                    }}
+                  >
+                    <Ionicons name="location-outline" size={20} color={colors.secondary} />
+                    <Text style={[s.countryName, { color: colors.text }]}>{item.name}</Text>
+                    {selectedState === item.name && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+                  </TouchableOpacity>
+                )}
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -470,18 +535,43 @@ export default function AnalyzeScreen() {
       {/* City Picker Modal */}
       <Modal visible={showCityPicker} animationType="slide" transparent>
         <View style={[s.modalOverlay, { backgroundColor: colors.overlay }]}>
-          <View style={[s.modalContent, { backgroundColor: colors.background, maxHeight: 380 }]}>
+          <View style={[s.modalContent, { backgroundColor: colors.background, maxHeight: 420 }]}>
             <View style={s.modalHeader}>
               <Text style={[s.modalTitle, { color: colors.text }]}>Select City</Text>
-              <TouchableOpacity onPress={() => setShowCityPicker(false)}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowCityPicker(false); setCitySearch(''); }}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
             </View>
-            <FlatList data={availableCities} keyExtractor={i => i} renderItem={({ item }) => (
-              <TouchableOpacity style={[s.countryRow, { borderBottomColor: colors.borderLight }]} onPress={() => { setSelectedCity(item); setShowCityPicker(false); }}>
-                <Ionicons name="business-outline" size={20} color={colors.tertiary} />
-                <Text style={[s.countryName, { color: colors.text }]}>{item}</Text>
-                {selectedCity === item && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
-              </TouchableOpacity>
-            )} />
+            <View style={[s.searchBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Ionicons name="search" size={18} color={colors.textTertiary} />
+              <TextInput style={[s.searchInput, { color: colors.text }]} placeholder="Search cities..." placeholderTextColor={colors.textTertiary} value={citySearch} onChangeText={setCitySearch} />
+            </View>
+            {availableCities.length === 0 ? (
+              <View style={s.emptyListWrap}>
+                <Ionicons name="information-circle-outline" size={28} color={colors.textTertiary} />
+                <Text style={[s.emptyListText, { color: colors.textSecondary }]}>No cities available for this state. You can still style by state alone.</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={filteredCities}
+                keyExtractor={(i, idx) => `${i.name}-${idx}`}
+                keyboardShouldPersistTaps="handled"
+                initialNumToRender={25}
+                windowSize={10}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[s.countryRow, { borderBottomColor: colors.borderLight }]}
+                    onPress={() => {
+                      setSelectedCity(item.name);
+                      setShowCityPicker(false);
+                      setCitySearch('');
+                    }}
+                  >
+                    <Ionicons name="business-outline" size={20} color={colors.tertiary} />
+                    <Text style={[s.countryName, { color: colors.text }]}>{item.name}</Text>
+                    {selectedCity === item.name && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+                  </TouchableOpacity>
+                )}
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -592,4 +682,6 @@ const s = StyleSheet.create({
   countryRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, gap: 12 },
   countryFlag: { fontSize: 24 },
   countryName: { flex: 1, fontSize: 15 },
+  emptyListWrap: { alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  emptyListText: { fontSize: 13, textAlign: 'center', lineHeight: 19 },
 });

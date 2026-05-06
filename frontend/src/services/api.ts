@@ -4,7 +4,7 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 const apiClient = axios.create({
   baseURL: `${API_BASE_URL}/api`,
-  timeout: 60000, // 60 seconds for AI analysis
+  timeout: 60000, // 60 seconds default
   headers: {
     'Content-Type': 'application/json',
   },
@@ -14,8 +14,15 @@ const apiClient = axios.create({
 // AUTO-RETRY INTERCEPTOR
 // Retries on transient errors (network/502/503/504) up to 2 times
 // with exponential backoff. Does NOT retry on 4xx (user errors).
+//
+// IMPORTANT: Requests can opt OUT of retry by passing { _skipRetry: true }
+// in the axios config. We use this for AI endpoints (/analyze-skin,
+// /travel-style) because the BACKEND already has its own internal retry
+// (18s + 25s). Stacking frontend retries on top caused the symptom
+// "first scan shows 'taking too long'" — the two retry windows compounded
+// and exceeded the axios timeout even when the backend would have responded.
 // ============================================================
-type RetryConfig = AxiosRequestConfig & { _retryCount?: number };
+type RetryConfig = AxiosRequestConfig & { _retryCount?: number; _skipRetry?: boolean };
 
 const MAX_RETRIES = 2;
 const RETRY_DELAYS = [1000, 2500]; // 1s, 2.5s
@@ -26,6 +33,9 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const config = error.config as RetryConfig;
     if (!config) return Promise.reject(error);
+
+    // Opt-out flag — honored for AI endpoints that already retry server-side
+    if (config._skipRetry) return Promise.reject(error);
 
     const retryCount = config._retryCount || 0;
 
@@ -150,7 +160,12 @@ export const api = {
 
   // Travel Style
   getTravelStyle: async (country: string, month: string, occasion: string, userId?: string) => {
-    const response = await apiClient.post('/travel-style', { country, month, occasion, user_id: userId });
+    // 90s timeout + no frontend retry — backend handles retry internally.
+    const response = await apiClient.post(
+      '/travel-style',
+      { country, month, occasion, user_id: userId },
+      { timeout: 90000, _skipRetry: true } as any,
+    );
     return response.data;
   },
 

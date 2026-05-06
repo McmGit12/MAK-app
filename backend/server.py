@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict, Any
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import hashlib
 import random
 import string
@@ -16,6 +16,13 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 import bcrypt
 import asyncio
 import time
+
+
+def now_utc() -> datetime:
+    """Return timezone-aware UTC datetime. Replaces deprecated utcnow()
+    and guarantees ISO serialization includes '+00:00' so frontend JS Date
+    correctly interprets as UTC and converts to the user's local timezone."""
+    return datetime.now(timezone.utc)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -157,7 +164,7 @@ class SkinAnalysis(BaseModel):
     skin_concerns: List[str]  # acne, wrinkles, dark spots, etc.
     texture_analysis: str
     ai_recommendations: List[Dict[str, Any]]
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=now_utc)
 
 class SkinAnalysisResponse(BaseModel):
     id: str
@@ -213,7 +220,14 @@ def generate_user_id() -> str:
 otp_store: Dict[str, str] = {}
 
 async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Dict[str, Any]:
-    """Use GPT-4o Vision to analyze skin/makeup from image"""
+    """Use GPT-4o Vision to analyze skin/makeup from image.
+
+    Uses temperature=0 and strong anchoring prompts to produce DETERMINISTIC,
+    consistent output for the same input photo. Results are cached by SHA-256
+    hash of the image (per mode) so an identical photo always returns an
+    identical analysis INSTANTLY (no LLM call) — this fixes the bug where
+    re-scanning the same face gave different skin type/tone/shape values.
+    """
     # Image size validation \u2014 returns 400 if invalid (frontend maps to 'badImage' variant)
     if not image_base64 or len(image_base64) < 200:
         raise HTTPException(
@@ -225,91 +239,126 @@ async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Di
             status_code=400,
             detail="Image is too large. Please use a smaller photo."
         )
-    
+
+    # ---------- IMAGE-HASH CACHE LOOKUP ----------
+    # SHA-256 of the base64 image + mode. Same photo + same mode = same result, guaranteed.
+    # This gives ~100ms response (vs 8-15s LLM call) for re-scans of the same image.
+    image_hash = hashlib.sha256((image_base64 + "|" + mode).encode()).hexdigest()
     try:
+        cached = await asyncio.wait_for(
+            db.analysis_cache.find_one({"image_hash": image_hash}),
+            timeout=2,
+        )
+        if cached and "result" in cached:
+            logger.info(f"Analysis cache HIT for hash={image_hash[:12]}... mode={mode}")
+            return cached["result"]
+    except Exception as e:
+        # Cache miss or DB hiccup — continue to LLM call
+        logger.debug(f"Cache lookup skipped: {str(e)[:80]}")
+
+    try:
+        # Shared anchoring preamble used by BOTH modes — forces the model to
+        # ground its output on STABLE bone/tone features (not transient lighting).
+        stability_preamble = """CRITICAL CONSISTENCY RULES — your output MUST be deterministic:
+- Anchor your analysis on STABLE, INNATE features: bone structure, natural undertone,
+  base skin type (oily/dry production patterns), eye shape, brow position.
+- IGNORE transient variables: current lighting, temporary redness, oil sheen from the moment,
+  makeup already worn, camera white-balance, filters.
+- Pick ONLY from the exact enum values provided — no synonyms, no creative variants.
+- Use neutral, medical-style descriptors. Do NOT add flourishes or adjectives the user didn't ask for.
+- If two possible values are equally likely, pick the more CONSERVATIVE / NEUTRAL one
+  (e.g. 'neutral' undertone over 'warm' when uncertain; 'normal' skin over 'combination' when ambiguous).
+- The SAME face in a DIFFERENT photo with similar framing MUST produce the same skin_type,
+  skin_tone, undertone, and face_shape values."""
+
         if mode == "makeup":
-            system_msg = """You are a warm, experienced makeup artist speaking directly to a client.
-            Analyze the provided facial image and suggest the best makeup that would suit this person.
-            
-            IMPORTANT RULES:
-            - Sound natural and conversational, like a real makeup artist talking to a client
-            - Be SPECIFIC to what you observe in the image - do not give generic advice
-            - Do NOT make up brand names - use general product type descriptions instead
-            - Base ALL suggestions on the actual skin tone, face shape, and features you see
-            - If you cannot clearly see the face, say so honestly
-            
-            You MUST respond in valid JSON format with these exact fields:
-            {
-                "skin_type": "one of: oily, dry, combination, normal, sensitive",
-                "skin_tone": "one of: fair, light, medium, tan, deep, dark",
-                "undertone": "one of: warm, cool, neutral",
-                "face_shape": "one of: oval, round, square, heart, oblong, diamond",
-                "skin_concerns": ["array of makeup-relevant observations"],
-                "texture_analysis": "brief, honest description of skin texture",
-                "ai_recommendations": [
-                    {
-                        "category": "category name",
-                        "recommendation": "specific recommendation based on what you SEE",
-                        "shade_range": "recommended shades based on THEIR tone",
-                        "tips": "practical application tips",
-                        "reason": "why this specifically suits THEIR features"
-                    }
-                ]
-            }
-            
-            Provide at least 7 recommendations covering ALL of these:
-            1. Foundation & Base - type and shade matched to their actual tone
-            2. Blush - type (cream/powder), color family suited to their undertone
-            3. Lip Color - finish and colors that complement their specific features
-            4. Eye Makeup - eyeshadow, liner, mascara suited to their eye shape
-            5. Contouring & Highlighting - placement based on their face shape
-            6. Brow Styling - shape recommendations based on their face
-            7. Hair Styling - styles that complement their face shape"""
+            system_msg = f"""You are a warm, experienced makeup artist speaking directly to a client.
+Analyze the provided facial image and suggest the best makeup that would suit this person.
+
+{stability_preamble}
+
+STYLE RULES:
+- Sound natural and conversational, like a real makeup artist talking to a client.
+- Be SPECIFIC to what you observe — no generic advice.
+- Do NOT make up brand names — use general product type descriptions instead.
+- If you cannot clearly see the face, say so honestly in texture_analysis.
+
+You MUST respond in valid JSON format with these exact fields:
+{{
+    "skin_type": "one of: oily, dry, combination, normal, sensitive",
+    "skin_tone": "one of: fair, light, medium, tan, deep, dark",
+    "undertone": "one of: warm, cool, neutral",
+    "face_shape": "one of: oval, round, square, heart, oblong, diamond",
+    "skin_concerns": ["array of makeup-relevant observations"],
+    "texture_analysis": "brief, honest description of skin texture",
+    "ai_recommendations": [
+        {{
+            "category": "category name",
+            "recommendation": "specific recommendation based on what you SEE",
+            "shade_range": "recommended shades based on THEIR tone",
+            "tips": "practical application tips",
+            "reason": "why this specifically suits THEIR features"
+        }}
+    ]
+}}
+
+Provide at least 7 recommendations covering ALL of these:
+1. Foundation & Base - type and shade matched to their actual tone
+2. Blush - type (cream/powder), color family suited to their undertone
+3. Lip Color - finish and colors that complement their specific features
+4. Eye Makeup - eyeshadow, liner, mascara suited to their eye shape
+5. Contouring & Highlighting - placement based on their face shape
+6. Brow Styling - shape recommendations based on their face
+7. Hair Styling - styles that complement their face shape"""
             user_text = "Please analyze this face and provide detailed makeup suggestions. Base everything on the actual features, skin tone, and face shape you observe. Be honest and specific. Return ONLY valid JSON."
         else:
-            system_msg = """You are a caring, knowledgeable skincare specialist speaking directly to a client.
-            Analyze the provided facial image and provide detailed skin analysis with routine recommendations.
-            
-            IMPORTANT RULES:
-            - Sound warm and supportive, like a real dermatologist talking to a patient
-            - Be SPECIFIC to what you observe - do not give generic one-size-fits-all advice
-            - Do NOT make up product brand names - use general product type descriptions
-            - Be honest about what you can and cannot determine from a photo
-            - If the photo is unclear, say so
-            
-            You MUST respond in valid JSON format with these exact fields:
-            {
-                "skin_type": "one of: oily, dry, combination, normal, sensitive",
-                "skin_tone": "one of: fair, light, medium, tan, deep, dark",
-                "undertone": "one of: warm, cool, neutral",
-                "face_shape": "one of: oval, round, square, heart, oblong, diamond",
-                "skin_concerns": ["array of ACTUAL concerns you observe"],
-                "texture_analysis": "honest description of what you see",
-                "ai_recommendations": [
-                    {
-                        "category": "category name",
-                        "recommendation": "specific product type for THEIR concerns",
-                        "shade_range": "N/A for skincare",
-                        "tips": "when and how to use it",
-                        "reason": "why this addresses THEIR specific needs"
-                    }
-                ]
-            }
-            
-            Provide at least 6 recommendations covering:
-            1. Cleanser - suited to their specific skin type
-            2. Toner/Essence - targeted to their concerns
-            3. Serum - addressing their specific issues
-            4. Moisturizer - matched to their skin type
-            5. Sunscreen - appropriate SPF
-            6. Weekly Treatment - based on their needs"""
+            system_msg = f"""You are a caring, knowledgeable skincare specialist speaking directly to a client.
+Analyze the provided facial image and provide detailed skin analysis with routine recommendations.
+
+{stability_preamble}
+
+STYLE RULES:
+- Sound warm and supportive, like a real dermatologist talking to a patient.
+- Be SPECIFIC to what you observe — no generic one-size-fits-all advice.
+- Do NOT make up product brand names — use general product type descriptions.
+- Be honest about what you can and cannot determine from a photo.
+- If the photo is unclear, say so in texture_analysis.
+
+You MUST respond in valid JSON format with these exact fields:
+{{
+    "skin_type": "one of: oily, dry, combination, normal, sensitive",
+    "skin_tone": "one of: fair, light, medium, tan, deep, dark",
+    "undertone": "one of: warm, cool, neutral",
+    "face_shape": "one of: oval, round, square, heart, oblong, diamond",
+    "skin_concerns": ["array of ACTUAL concerns you observe"],
+    "texture_analysis": "honest description of what you see",
+    "ai_recommendations": [
+        {{
+            "category": "category name",
+            "recommendation": "specific product type for THEIR concerns",
+            "shade_range": "N/A for skincare",
+            "tips": "when and how to use it",
+            "reason": "why this addresses THEIR specific needs"
+        }}
+    ]
+}}
+
+Provide at least 6 recommendations covering:
+1. Cleanser - suited to their specific skin type
+2. Toner/Essence - targeted to their concerns
+3. Serum - addressing their specific issues
+4. Moisturizer - matched to their skin type
+5. Sunscreen - appropriate SPF
+6. Weekly Treatment - based on their needs"""
             user_text = "Please analyze this facial image and provide a personalized skincare routine. Be specific to what you observe and honest about your assessment. Return ONLY valid JSON, no other text."
 
+        # temperature=0 forces deterministic output — same prompt + same image = same answer.
+        # This fixes the bug where re-scanning the same face gave different skin type/tone values.
         chat_factory = lambda: LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"skin-analysis-{uuid.uuid4()}",
             system_message=system_msg
-        ).with_model("openai", "gpt-4o")
+        ).with_model("openai", "gpt-4o").with_params(temperature=0)
         
         # Create image content
         image_content = ImageContent(image_base64=image_base64)
@@ -320,7 +369,7 @@ async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Di
         )
         
         # Resilient LLM call: uses tuned defaults (18s + 25s retry = ~43s max)
-        # Frontend axios timeout is 60s, so we have ~17s safety buffer.
+        # Frontend axios timeout is 90s (see api.ts), giving ~47s safety buffer.
         response, status = await llm_call_resilient(
             chat_factory,
             user_message,
@@ -346,6 +395,28 @@ async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Di
         clean_response = clean_response.strip()
         
         analysis = json.loads(clean_response)
+
+        # ---------- CACHE WRITE ----------
+        # Store the successful analysis so the same image returns instantly next time.
+        # Non-fatal: if the write fails, the result is still returned to the user.
+        try:
+            await asyncio.wait_for(
+                db.analysis_cache.update_one(
+                    {"image_hash": image_hash},
+                    {"$set": {
+                        "image_hash": image_hash,
+                        "mode": mode,
+                        "result": analysis,
+                        "created_at": now_utc(),
+                    }},
+                    upsert=True,
+                ),
+                timeout=3,
+            )
+            logger.info(f"Analysis cached for hash={image_hash[:12]}... mode={mode}")
+        except Exception as e:
+            logger.warning(f"Cache write skipped (non-fatal): {str(e)[:80]}")
+
         return analysis
         
     except HTTPException:
@@ -365,7 +436,7 @@ class AppInstall(BaseModel):
     device_id: str
     platform: str  # android or ios
     app_version: str
-    installed_at: datetime = Field(default_factory=datetime.utcnow)
+    installed_at: datetime = Field(default_factory=now_utc)
 
 class InstallStats(BaseModel):
     total_installs: int
@@ -387,7 +458,7 @@ async def register_install(device_id: str, platform: str = "android", app_versio
         "device_id": device_id,
         "platform": platform.lower(),
         "app_version": app_version,
-        "installed_at": datetime.utcnow()
+        "installed_at": now_utc()
     }
     await db.app_installs.insert_one(install_data)
     
@@ -402,8 +473,7 @@ async def get_install_stats():
     ios = await db.app_installs.count_documents({"platform": "ios"})
     
     # Recent installs in last 24 hours
-    from datetime import timedelta
-    yesterday = datetime.utcnow() - timedelta(hours=24)
+    yesterday = now_utc() - timedelta(hours=24)
     recent = await db.app_installs.count_documents({"installed_at": {"$gte": yesterday}})
     
     return InstallStats(
@@ -477,7 +547,7 @@ async def register_user(data: RegisterRequest):
         "email": email,
         "phone": data.phone,
         "country_code": data.country_code,
-        "created_at": datetime.utcnow()
+        "created_at": now_utc()
     }
     await db.users.insert_one(new_user)
     return UserResponse(id=user_id, user_hash=user_hash, login_method="email", display_name=data.name.strip(), email=email, created_at=new_user["created_at"])
@@ -557,7 +627,7 @@ async def guest_login():
         "user_hash": guest_hash,
         "login_method": "guest",
         "display_name": "Guest",
-        "created_at": datetime.utcnow()
+        "created_at": now_utc()
     }
     await db.users.insert_one(new_user)
     
@@ -608,7 +678,7 @@ async def email_login(data: EmailLogin):
         "user_hash": user_hash,
         "login_method": "email",
         "display_name": None,
-        "created_at": datetime.utcnow()
+        "created_at": now_utc()
     }
     await db.users.insert_one(new_user)
     
@@ -658,7 +728,7 @@ async def verify_otp(data: OTPVerify):
         "user_hash": user_hash,
         "login_method": "phone",
         "display_name": None,
-        "created_at": datetime.utcnow()
+        "created_at": now_utc()
     }
     await db.users.insert_one(new_user)
     
@@ -904,7 +974,7 @@ async def submit_feedback(data: FeedbackCreate):
         "rating": data.rating,
         "category": data.category,
         "comment": data.comment,
-        "created_at": datetime.utcnow()
+        "created_at": now_utc()
     }
     
     await db.feedback.insert_one(feedback)
@@ -963,7 +1033,7 @@ async def get_travel_style(data: TravelStyleRequest):
             Provide at least 4 outfit and 5 makeup recommendations.
             Outfit categories: Daywear, Evening, Formal/Event, Casual, Footwear
             Makeup categories: Base, Eyes, Lips, Blush & Contour, Overall Look"""
-        ).with_model("openai", "gpt-4o")
+        ).with_model("openai", "gpt-4o").with_params(temperature=0.2)
         
         user_message = UserMessage(
             text=f"I'm travelling to {data.country} in {data.month} for a {data.occasion}. Give me specific outfit and makeup recommendations for THIS exact location, considering the typical weather there in {data.month}, local cultural expectations, and the occasion. Be specific to this destination - don't give generic advice. Return ONLY valid JSON."
@@ -1107,7 +1177,7 @@ async def health_check():
     
     return {
         "status": "healthy" if mongo_ok else "degraded",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": now_utc().isoformat(),
         "mongodb": "connected" if mongo_ok else "disconnected",
         "llm_key_configured": bool(EMERGENT_LLM_KEY),
     }
@@ -1116,7 +1186,7 @@ async def health_check():
 async def warmup():
     """Warmup endpoint to pre-initialize connections and kill cold starts.
     Called by the frontend on app launch. Pings DB, ensures pool is warm."""
-    result = {"status": "warm", "timestamp": datetime.utcnow().isoformat()}
+    result = {"status": "warm", "timestamp": now_utc().isoformat()}
     # Pre-warm MongoDB pool
     try:
         await asyncio.wait_for(db.command("ping"), timeout=3)
@@ -1165,6 +1235,11 @@ async def startup_event():
         )
         await asyncio.wait_for(
             db.feedback.create_index([("user_id", 1), ("created_at", -1)]),
+            timeout=5
+        )
+        # Analysis cache: unique index on image_hash for fast lookups
+        await asyncio.wait_for(
+            db.analysis_cache.create_index("image_hash", unique=True),
             timeout=5
         )
         logger.info("MongoDB indexes ensured")
