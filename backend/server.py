@@ -5,7 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, field_serializer
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -41,6 +41,8 @@ client = AsyncIOMotorClient(
     retryReads=True,                 # Auto-retry failed reads
     heartbeatFrequencyMS=10000,      # Ping every 10s to keep pool alive
     waitQueueTimeoutMS=5000,         # Max wait time for available connection
+    tz_aware=True,                   # v1.0.2: Return BSON Date as tz-aware UTC datetime
+                                     # (without this, reads come back naive — breaks Canada user TZ display)
 )
 db = client[os.environ.get('DB_NAME', 'complexionfit_db')]
 
@@ -135,6 +137,16 @@ class UserResponse(BaseModel):
     email: Optional[str] = None
     created_at: datetime
 
+    # v1.0.2: emit "+00:00" instead of "Z" so JS Date parses as UTC and converts to local TZ.
+    # If DB returned a naive datetime (legacy rows pre-tz_aware), assume UTC.
+    @field_serializer('created_at')
+    def _ser_created_at(self, v: datetime, _info):
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v.isoformat()
+
 class UpdateDisplayName(BaseModel):
     user_id: str
     display_name: str
@@ -177,6 +189,14 @@ class SkinAnalysisResponse(BaseModel):
     ai_recommendations: List[Dict[str, Any]]
     created_at: datetime
 
+    @field_serializer('created_at')
+    def _ser_created_at(self, v: datetime, _info):
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v.isoformat()
+
 class CuratedRecommendation(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     skin_type: str
@@ -201,6 +221,14 @@ class FeedbackResponse(BaseModel):
     category: str
     comment: Optional[str]
     created_at: datetime
+
+    @field_serializer('created_at')
+    def _ser_created_at(self, v: datetime, _info):
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v.isoformat()
 
 # ==================== HELPER FUNCTIONS ====================
 

@@ -632,12 +632,28 @@ agent_communication:
 11. POST /api/chat → still 200 with conversational response (regression — no temperature change here).
 
 test_plan:
-  current_focus:
-    - "Timezone +00:00 suffix on ALL datetime fields (analyze-skin, analyses list, register, password-login)"
-  stuck_tasks:
-    - "Timezone +00:00 suffix on ALL datetime fields (analyze-skin, analyses list, register, password-login)"
+  current_focus: []
+  stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      v1.0.2 TIMEZONE FIX RE-VERIFICATION COMPLETE — ALL 7 PASS. The two-line fix landed correctly:
+        (1) AsyncIOMotorClient(..., tz_aware=True) makes Motor return BSON Date as tz-aware UTC datetime, so legacy NAIVE values stored before v1.0.2 (e.g. test@mak.com user, all GET /api/analyses items) now come back tz-aware.
+        (2) @field_serializer on UserResponse / SkinAnalysisResponse / FeedbackResponse re-attaches UTC if tzinfo is missing and emits Python stdlib isoformat() (which uses '+00:00') instead of Pydantic v2's default 'Z' suffix.
+      
+      Verified results:
+        ✅ POST /api/auth/register (fresh user): created_at='...+00:00'
+        ✅ POST /api/auth/password-login (legacy test@mak.com — was NAIVE): created_at='2026-04-24T02:53:31.368000+00:00' — FIXED
+        ✅ GET /api/analyses/9e846c3c-... (was NAIVE — Canada bug source): both items '...+00:00' — FIXED
+        ✅ GET /api/auth/profile/{user_id}: '...+00:00'
+        ✅ POST /api/feedback: '...+00:00'
+        ✅ GET /api/warmup: '...+00:00' (already worked)
+        ✅ GET /api/health: '...+00:00' (already worked)
+      
+      Sanity: ZERO datetime field ends with bare 'Z'. v1.0.2 backend is DEPLOYMENT-READY. Test artifact at /app/timezone_test.py for reproducibility.
 
 backend:
   - task: "Image-hash caching / consistency (v1.0.2)"
@@ -653,12 +669,26 @@ backend:
         comment: "VERIFIED end-to-end. Pre-seeded db.analysis_cache with deterministic skin-analysis result keyed by SHA-256(image_base64+'|'+mode). POST /api/analyze-skin with the same image_base64+mode hit the cache in 266ms (call 1 after seed) and 155ms (call 2) — both well under the 500ms SLA. Returned skin_type/skin_tone/undertone/face_shape/texture_analysis IDENTICAL to seeded result both times. db.analysis_cache collection has unique index on image_hash, entry contains image_hash+mode+result+created_at. Cache mechanism is production-correct and resolves the 'same face → different results' bug."
   - task: "Timezone +00:00 suffix on ALL datetime fields (analyze-skin, analyses list, register, password-login)"
     implemented: true
-    working: false
+    working: true
     file: "/app/backend/server.py"
-    stuck_count: 1
+    stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          v1.0.2 TIMEZONE FIX RE-VERIFIED — ALL 7 ENDPOINTS PASS. Re-tested via /app/timezone_test.py against external preview URL after main agent applied (1) tz_aware=True on AsyncIOMotorClient (line ~37 of server.py) and (2) @field_serializer for created_at on UserResponse / SkinAnalysisResponse / FeedbackResponse that re-attaches UTC if tzinfo is missing and emits isoformat() (which yields '+00:00'). Results:
+            1. POST /api/auth/register (fresh user tz_test_<ts>@mak.com) → 200, created_at='2026-05-06T20:26:XX.XXXXXX+00:00' ✅ has '+00:00'
+            2. POST /api/auth/password-login (legacy seed user test@mak.com, registered BEFORE v1.0.2) → 200, created_at='2026-04-24T02:53:31.368000+00:00' ✅ has '+00:00' — THIS WAS PREVIOUSLY NAIVE; now correctly tz-aware
+            3. GET /api/analyses/9e846c3c-f6b1-49fc-98f9-a3f9c7925d78 → 200, count=2; both items: created_at='2026-05-06T20:22:19.393000+00:00' and '2026-05-06T20:22:19.230000+00:00' ✅ — THIS WAS PREVIOUSLY NAIVE and the EXACT endpoint tied to the Canada-user bug; now correctly tz-aware
+            4. GET /api/auth/profile/{user_id} → 200, created_at='2026-04-24T02:53:31.368000+00:00' ✅
+            5. POST /api/feedback (rating 5, app_experience) → 200, created_at='2026-05-06T20:26:46.828714+00:00' ✅
+            6. GET /api/warmup → 200, timestamp='2026-05-06T20:26:46.983292+00:00' ✅ (already worked, confirmed)
+            7. GET /api/health → 200, timestamp='2026-05-06T20:26:47.150024+00:00' ✅ (already worked, confirmed)
+          
+          SANITY: ZERO datetime field in any response ends with bare 'Z'. All seven contain '+00:00'. The combo of Motor tz_aware=True (re-attaches UTC on BSON Date reads, fixing legacy NAIVE values) plus @field_serializer (Python stdlib isoformat() emits '+00:00' instead of Pydantic v2's default 'Z') resolves both root causes identified in the prior failed run. Canada-timezone bug is now closed. v1.0.2 backend is DEPLOYMENT-READY.
+
       - working: false
         agent: "testing"
         comment: |
