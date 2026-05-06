@@ -99,7 +99,7 @@ git push -u origin main
 1. Open `/app/frontend/.env`
 2. Change this line:
    ```
-   EXPO_PUBLIC_BACKEND_URL=https://makeup-buddy-preview.preview.emergentagent.com
+   EXPO_PUBLIC_BACKEND_URL=https://mak-makeup-buddy.preview.emergentagent.com
    ```
    To:
    ```

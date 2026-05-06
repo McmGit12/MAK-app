@@ -6,7 +6,7 @@ Quick verification of travel-style response uniqueness
 import requests
 import json
 
-BASE_URL = "https://makeup-buddy-preview.preview.emergentagent.com/api"
+BASE_URL = "https://mak-makeup-buddy.preview.emergentagent.com/api"
 
 def test_travel_responses():
     print("🔍 Verifying Travel Style Response Uniqueness")

@@ -9,7 +9,7 @@ import json
 import requests
 from typing import Tuple
 
-BASE_URL = "https://makeup-buddy-preview.preview.emergentagent.com/api"
+BASE_URL = "https://mak-makeup-buddy.preview.emergentagent.com/api"
 OLD_ERR = "Sorry we are experiencing issues, please try again in some time."
 
 results = []
