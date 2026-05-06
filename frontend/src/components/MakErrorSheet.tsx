@@ -13,56 +13,21 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
+import { STRINGS } from '../constants/strings';
 
 export type MakErrorVariant = 'busy' | 'timeout' | 'badImage' | 'network' | 'generic';
 
-interface VariantConfig {
+interface VariantVisualConfig {
   iconName: keyof typeof Ionicons.glyphMap;
   iconColorKey: 'primary' | 'secondary' | 'tertiary' | 'accent';
-  title: string;
-  body: string;
-  primaryCta: string;
-  secondaryCta?: string;
 }
 
-const VARIANTS: Record<MakErrorVariant, VariantConfig> = {
-  busy: {
-    iconName: 'sparkles',
-    iconColorKey: 'primary',
-    title: 'Almost there!',
-    body: 'The service is a little busy right now — give it a moment, then tap below.',
-    primaryCta: 'Try Again',
-    secondaryCta: 'Choose Different Photo',
-  },
-  timeout: {
-    iconName: 'time-outline',
-    iconColorKey: 'secondary',
-    title: 'This is taking a moment',
-    body: 'Your analysis is running a bit slow — let\u2019s give it another go.',
-    primaryCta: 'Try Again',
-    secondaryCta: 'Choose Different Photo',
-  },
-  badImage: {
-    iconName: 'image-outline',
-    iconColorKey: 'accent',
-    title: 'Let\u2019s try a different photo',
-    body: 'For the best results, use a clear, well-lit photo with your face centered and visible.',
-    primaryCta: 'Choose Another Photo',
-  },
-  network: {
-    iconName: 'wifi-outline',
-    iconColorKey: 'tertiary',
-    title: 'Connection hiccup',
-    body: 'We can\u2019t reach our servers right now. Check your internet and tap below.',
-    primaryCta: 'Try Again',
-  },
-  generic: {
-    iconName: 'refresh-outline',
-    iconColorKey: 'primary',
-    title: 'Something went sideways',
-    body: 'Don\u2019t worry, this happens sometimes. Tap to try again.',
-    primaryCta: 'Try Again',
-  },
+const VARIANT_VISUALS: Record<MakErrorVariant, VariantVisualConfig> = {
+  busy: { iconName: 'sparkles', iconColorKey: 'primary' },
+  timeout: { iconName: 'time-outline', iconColorKey: 'secondary' },
+  badImage: { iconName: 'image-outline', iconColorKey: 'accent' },
+  network: { iconName: 'wifi-outline', iconColorKey: 'tertiary' },
+  generic: { iconName: 'refresh-outline', iconColorKey: 'primary' },
 };
 
 interface Props {
@@ -71,8 +36,9 @@ interface Props {
   onClose: () => void;
   onPrimaryPress: () => void;
   onSecondaryPress?: () => void;
-  // Optional overrides (rare)
+  /** Override title (rare). */
   customTitle?: string;
+  /** Override body (rare). */
   customBody?: string;
 }
 
@@ -92,16 +58,18 @@ export function MakErrorSheet({
   const slideAnim = useRef(new Animated.Value(SCREEN.height)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  const config = VARIANTS[variant];
-  const title = customTitle ?? config.title;
-  const body = customBody ?? config.body;
-  const iconColor = colors[config.iconColorKey];
+  const visuals = VARIANT_VISUALS[variant];
+  const copy = STRINGS.errors[variant];
+  const title = customTitle ?? copy.title;
+  const body = customBody ?? copy.body;
+  const secondaryCta = 'secondaryCta' in copy ? copy.secondaryCta : undefined;
+  const iconColor = colors[visuals.iconColorKey];
   const iconBg =
-    config.iconColorKey === 'primary'
+    visuals.iconColorKey === 'primary'
       ? colors.primaryLight
-      : config.iconColorKey === 'secondary'
+      : visuals.iconColorKey === 'secondary'
       ? colors.secondaryLight
-      : config.iconColorKey === 'tertiary'
+      : visuals.iconColorKey === 'tertiary'
       ? colors.tertiaryLight
       : colors.accentLight;
 
@@ -145,8 +113,14 @@ export function MakErrorSheet({
     >
       <View style={styles.modalRoot}>
         {/* Backdrop — tap to dismiss */}
-        <Animated.View style={[styles.backdrop, { opacity: fadeAnim, backgroundColor: colors.overlay }]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close error sheet" />
+        <Animated.View
+          style={[styles.backdrop, { opacity: fadeAnim, backgroundColor: colors.overlay }]}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={onClose}
+            accessibilityLabel="Close error sheet"
+          />
         </Animated.View>
 
         {/* Sheet */}
@@ -161,10 +135,8 @@ export function MakErrorSheet({
             },
           ]}
         >
-          {/* Drag handle (visual cue) */}
           <View style={[styles.handle, { backgroundColor: colors.borderLight }]} />
 
-          {/* X close button */}
           <TouchableOpacity
             onPress={onClose}
             style={styles.closeBtn}
@@ -175,45 +147,54 @@ export function MakErrorSheet({
             <Ionicons name="close" size={22} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          {/* Soft icon circle */}
           <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
-            <Ionicons name={config.iconName} size={28} color={iconColor} />
+            <Ionicons name={visuals.iconName} size={28} color={iconColor} />
           </View>
 
-          {/* Title — no truncation, wraps freely */}
           <Text
-            style={[styles.title, { color: colors.text }]}
+            style={[styles.title, { color: colors.text, writingDirection: 'ltr' }]}
             allowFontScaling
             accessibilityRole="header"
           >
             {title}
           </Text>
 
-          {/* Body — no truncation, line-height optimized for readability */}
-          <Text style={[styles.body, { color: colors.textSecondary }]} allowFontScaling>
+          <Text
+            style={[styles.body, { color: colors.textSecondary, writingDirection: 'ltr' }]}
+            allowFontScaling
+          >
             {body}
           </Text>
 
-          {/* Primary CTA */}
           <TouchableOpacity
             onPress={onPrimaryPress}
             style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
             activeOpacity={0.85}
-            accessibilityLabel={config.primaryCta}
+            accessibilityLabel={copy.primaryCta}
             accessibilityRole="button"
           >
-            <Text style={[styles.primaryBtnText, { color: colors.buttonText }]}>{config.primaryCta}</Text>
+            <Text
+              style={[styles.primaryBtnText, { color: colors.buttonText, writingDirection: 'ltr' }]}
+            >
+              {copy.primaryCta}
+            </Text>
           </TouchableOpacity>
 
-          {/* Secondary action (if defined) */}
-          {config.secondaryCta && onSecondaryPress ? (
+          {secondaryCta && onSecondaryPress ? (
             <TouchableOpacity
               onPress={onSecondaryPress}
               style={styles.secondaryBtn}
               activeOpacity={0.7}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={[styles.secondaryBtnText, { color: colors.primary }]}>{config.secondaryCta}</Text>
+              <Text
+                style={[
+                  styles.secondaryBtnText,
+                  { color: colors.primary, writingDirection: 'ltr' },
+                ]}
+              >
+                {secondaryCta}
+              </Text>
             </TouchableOpacity>
           ) : null}
         </Animated.View>
@@ -237,12 +218,10 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingHorizontal: 24,
     alignItems: 'center',
-    // Native shadow
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 16,
-    // Cap height — long-text safety
     maxHeight: SCREEN.height * 0.85,
   },
   handle: {
@@ -261,7 +240,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    // Big tap target via hitSlop
   },
   iconCircle: {
     width: 64,
@@ -278,7 +256,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 10,
     paddingHorizontal: 8,
-    // Allow wrapping
     flexShrink: 1,
     width: '100%',
   },

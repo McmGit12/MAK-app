@@ -2,43 +2,47 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
+import { STRINGS, AnalyzeMode } from '../constants/strings';
 
 interface Props {
-  // Set true to show the "first scan can take 20-30s" hint
-  showFirstScanHint?: boolean;
-  // Override messages if needed
+  /** Which analysis mode the user is in. Determines message set. */
+  mode?: AnalyzeMode;
+  /** Override messages if needed (rare). */
   messages?: string[];
-  // Rotation interval in ms (default 5000)
+  /** Rotation interval in ms (default 5000). */
   intervalMs?: number;
+  /** Delay (ms) before showing the "first scan can take 20-30s" hint. Default 10000. */
+  hintDelayMs?: number;
+  /** Force-show the hint (bypasses delay). Default false. */
+  alwaysShowHint?: boolean;
 }
 
-const DEFAULT_MESSAGES = [
-  'Analyzing your skin...',
-  'Looking at your skin tone & texture...',
-  'Crafting personalized recommendations...',
-  'Almost done — adding final touches ✨',
-];
-
 export function MakLoadingRotator({
-  showFirstScanHint = true,
-  messages = DEFAULT_MESSAGES,
+  mode = 'skinCare',
+  messages,
   intervalMs = 5000,
+  hintDelayMs = 10000,
+  alwaysShowHint = false,
 }: Props) {
   const { colors } = useTheme();
   const [index, setIndex] = useState(0);
+  const [showHint, setShowHint] = useState(alwaysShowHint);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
+  // Resolve message set
+  const resolvedMessages = messages ?? STRINGS.loading[mode];
+
+  // Rotate messages every `intervalMs`
   useEffect(() => {
-    if (messages.length <= 1) return;
+    if (resolvedMessages.length <= 1) return;
 
     const interval = setInterval(() => {
-      // Fade out -> swap text -> fade in
       Animated.timing(fadeAnim, {
         toValue: 0,
         duration: 350,
         useNativeDriver: true,
       }).start(() => {
-        setIndex((prev) => (prev + 1) % messages.length);
+        setIndex((prev) => (prev + 1) % resolvedMessages.length);
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 350,
@@ -48,21 +52,38 @@ export function MakLoadingRotator({
     }, intervalMs);
 
     return () => clearInterval(interval);
-  }, [messages, intervalMs, fadeAnim]);
+  }, [resolvedMessages, intervalMs, fadeAnim]);
+
+  // Show the "first scan slow" hint only after delay (b: smart contextual hint)
+  useEffect(() => {
+    if (alwaysShowHint) {
+      setShowHint(true);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setShowHint(true);
+    }, hintDelayMs);
+
+    return () => clearTimeout(timer);
+  }, [hintDelayMs, alwaysShowHint]);
 
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" color={colors.primary} />
 
       <Animated.Text
-        style={[styles.message, { color: colors.text, opacity: fadeAnim }]}
+        style={[
+          styles.message,
+          { color: colors.text, opacity: fadeAnim, writingDirection: 'ltr' },
+        ]}
         allowFontScaling
         numberOfLines={2}
       >
-        {messages[index]}
+        {resolvedMessages[index]}
       </Animated.Text>
 
-      {showFirstScanHint ? (
+      {showHint ? (
         <View style={[styles.hintBox, { backgroundColor: colors.primaryLight }]}>
           <Ionicons
             name="information-circle-outline"
@@ -71,10 +92,10 @@ export function MakLoadingRotator({
             style={styles.hintIcon}
           />
           <Text
-            style={[styles.hintText, { color: colors.text }]}
+            style={[styles.hintText, { color: colors.text, writingDirection: 'ltr' }]}
             allowFontScaling
           >
-            First scan can take 20–30 seconds — hang tight, this is normal!
+            {STRINGS.loadingHints.delayed}
           </Text>
         </View>
       ) : null}
@@ -94,7 +115,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
-    minHeight: 44, // 2 lines reserved
+    minHeight: 44,
     flexShrink: 1,
     width: '100%',
   },

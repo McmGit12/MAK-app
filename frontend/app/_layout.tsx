@@ -2,10 +2,16 @@ import React, { useEffect } from 'react';
 import { Stack, useSegments, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, I18nManager } from 'react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { ThemeProvider, useTheme } from '../src/context/ThemeContext';
 import { api } from '../src/services/api';
+
+// Lock the app to LTR (left-to-right) layout regardless of device locale.
+// This release ships English-only; users on RTL device locales (Arabic, Hebrew, etc.)
+// shouldn't see the layout flip. Future i18n release will revisit this.
+I18nManager.allowRTL(false);
+I18nManager.forceRTL(false);
 
 function useProtectedRoute() {
   const { user, loading } = useAuth();

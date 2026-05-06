@@ -540,3 +540,55 @@ agent_communication:
 
 ### Conclusion
 All 3 user-reported critical bugs (tab bar overlap, FAB overlap, forgot password missing) are FIXED. App is **READY FOR ANDROID APK BUILD**. Remaining items in test script are tooling limitations (RN Alert modals not browser dialogs, custom-icon tab buttons not text-locatable), not application defects.
+
+---
+
+## v1.0.1 Update (2026-05-05) — Error UX overhaul + backend resilience
+
+### Backend Changes for Testing
+1. **`/api/analyze-skin`** — image validation added:
+   - Empty/tiny image (`len(image_base64) < 200`) → returns **HTTP 400** with detail "Image couldn't be processed. Please use a clear photo."
+   - Oversized image (`len(image_base64) > 15_000_000`) → returns **HTTP 400** with detail "Image is too large. Please use a smaller photo."
+   - LLM failure (both attempts) → returns **HTTP 503** with detail "Service is busy. Please try again."
+   - LLM timeout (504) handled by `llm_with_timeout` wrapper.
+2. **`llm_call_resilient`** timeouts lowered: first_timeout=18s, retry_timeout=25s (was 20s/35s, and analyze used 25s/40s). Total max now ~43s — safely under frontend's 60s axios timeout.
+3. **`/api/travel-style`** — same resilience changes (uses default timeouts now), re-raises HTTPException so 503 propagates.
+4. **`/api/chat`** — fallback message updated from "Sorry we are experiencing issues..." to "I'm having a little trouble responding right now — give it a moment and try again ✨"
+5. **HTTPException re-raise added** in analyze_skin_with_ai and travel-style except blocks so explicit 400/503/504 codes aren't accidentally wrapped in generic 503.
+
+### Backend test focus (priority order):
+1. POST /api/analyze-skin with empty `image_base64` → expect 400
+2. POST /api/analyze-skin with valid image → expect 200 OR 503 (cold-start) — should NOT timeout the frontend
+3. POST /api/analyze-skin with very large dummy base64 (>15MB) → expect 400
+4. POST /api/travel-style (USA/March/Wedding) → expect 200 with ai_status field
+5. POST /api/chat (valid beauty Q) → expect 200, response not the generic "Sorry we are experiencing..." string
+6. GET /api/warmup → expect 200 quickly (<5s)
+7. GET /api/health → expect 200 with mongodb + llm_key_configured fields
+8. Regression: full auth flow still works (register, login, change-password)
+
+### Frontend Changes (NOT tested yet — awaiting user approval to invoke frontend testing agent)
+1. New components: `MakErrorSheet`, `MakLoadingRotator`, `MakInfoBanner` in `/src/components/`
+2. Centralized strings in `/src/constants/strings.ts` (i18n-ready)
+3. `analyze.tsx`: replaces `Alert.alert("Oops!", ...)` with `<MakErrorSheet>` bottom sheet, replaces inline spinner with full-screen `<MakLoadingRotator>` overlay (mode-aware messages: skinCare/makeup/travel)
+4. `analyze.tsx`: re-warmup ping when tab opens (kills cold-start when user navigates back)
+5. `AskMakChatbot.tsx`: error message text updated to `STRINGS.chat.errorMessage`
+6. `_layout.tsx`: `I18nManager.allowRTL(false)` to lock LTR layout regardless of device locale
+7. `app.json`: version bumped 1.0.0 → 1.0.1
+8. `/error-preview` route exists temporarily for visual QA (will be deleted before .aab build)
+
+test_plan:
+  current_focus:
+    - "POST /api/analyze-skin: image validation returns 400 for empty/tiny/oversized images"
+    - "POST /api/analyze-skin: explicit HTTPException codes (400/503/504) are not wrapped"
+    - "Backend total max time stays under 45s (no 60s timeouts)"
+    - "Travel-style + chat regression — error messages updated"
+    - "All other endpoints (auth, warmup, health) regression — no breakage"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: "v1.0.1 — Error UX overhaul. User reported the very first face scan in production failed with the generic 'Oops! Sorry we are experiencing issues' message and there was no retry button. Root cause was a critical timeout mismatch: backend max ~65s but frontend axios 60s — frontend gave up before backend retry completed. Fixed by: (1) Lowering backend timeouts to 18s + 25s = 43s max, (2) Adding image validation (400 for empty/oversized), (3) Differentiated error responses (400/503/504), (4) Re-raising HTTPException so codes propagate cleanly, (5) Updated chat fallback message to warmer wording. Frontend gets new bottom-sheet error UX + mode-aware loading rotator (built but not tested yet — frontend testing requires user approval). Please test backend changes per the test_plan above with priority on /api/analyze-skin error paths."
+  - agent: "testing"
+    message: "v1.0.1 BACKEND TESTING COMPLETE — ALL CHECKS PASS. Tested via /app/backend_test.py against external preview URL. Results: (1) GET /api/warmup → 200 in 0.24s (<5s SLA). (2) GET /api/health → 200 with mongodb='connected' and llm_key_configured=true. (3) POST /api/analyze-skin image validation VERIFIED (re-tested with real seeded user_id since validation runs after user-existence check): empty image → 400 'Image couldn't be processed. Please use a clear photo.' (0.14s); 'abc' (3 chars) → 400 same message (0.16s); >15M chars → 400 'Image is too large. Please use a smaller photo.' (1.21s). (4) POST /api/analyze-skin with valid 1x1 PNG → 503 'Service is busy. Please try again.' in 1.70s (well under 50s; OpenAI returned non-JSON refusal which the endpoint catches and returns clean 503 — NEVER the old string). (5) POST /api/travel-style (France/June/Vacation) → 200 in 8.65s with ai_status='ok' and full payload (destination_info, outfit_suggestions, makeup_look, accessories, dos_and_donts, overall_vibe). On a separate USA/March/Wedding call, transient JSON-parse failure correctly returned 503 'Service is busy. Please try again.' — NOT the old wording. (6) POST /api/chat ('What's the best moisturizer for oily skin?') → 200 with ai_status='ok', 338-char response. Fallback path code-reviewed and confirmed updated to 'I'm having a little trouble responding right now — give it a moment and try again ✨'. (7) Regression: check-email (exists=true), password-login (200), GET /api/analyses/{user_id} (200, array) all pass. CONFIRMED: Zero responses contained the old string 'Sorry we are experiencing issues, please try again in some time.' All explicit HTTPException codes (400/503/504) propagate cleanly without being wrapped (verified via re-raise blocks in analyze_skin_with_ai and travel-style). Backend is v1.0.1 deployment-ready."

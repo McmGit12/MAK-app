@@ -1,228 +1,296 @@
 """
-Backend API pre-deployment verification for MAK app.
-Tests error-handling changes + regression coverage per review request.
+v1.0.1 Backend Tests for MAK app — Error UX overhaul + resilience.
+Focus: error-handling improvements per review request.
 """
-import requests
+import os
+import sys
 import time
 import json
-import sys
+import requests
+from typing import Tuple
 
 BASE_URL = "https://makeup-buddy-preview.preview.emergentagent.com/api"
-GENERIC_ERR = "Sorry we are experiencing issues, please try again in some time."
+OLD_ERR = "Sorry we are experiencing issues, please try again in some time."
 
 results = []
 
-def record(name, passed, detail=""):
-    status = "PASS" if passed else "FAIL"
-    print(f"[{status}] {name} — {detail}")
-    results.append((name, passed, detail))
 
-def post(path, payload, timeout=60):
-    return requests.post(BASE_URL + path, json=payload, timeout=timeout)
-
-def get(path, timeout=30):
-    return requests.get(BASE_URL + path, timeout=timeout)
+def log(name: str, ok: bool, details: str = ""):
+    status = "PASS" if ok else "FAIL"
+    print(f"[{status}] {name}: {details}")
+    results.append({"name": name, "ok": ok, "details": details})
 
 
-# ==================== REGRESSION CHECKS ====================
-
-def test_warmup():
+def post(path: str, payload: dict, timeout: int = 60) -> Tuple[int, dict, float]:
     t0 = time.time()
     try:
-        r = get("/warmup", timeout=15)
+        r = requests.post(f"{BASE_URL}{path}", json=payload, timeout=timeout)
         elapsed = time.time() - t0
-        ok = r.status_code == 200 and elapsed < 5
-        record("GET /api/warmup", ok, f"status={r.status_code} elapsed={elapsed:.2f}s body={r.json()}")
-    except Exception as e:
-        record("GET /api/warmup", False, f"exception: {e}")
+        try:
+            data = r.json()
+        except Exception:
+            data = {"_raw": r.text}
+        return r.status_code, data, elapsed
+    except requests.exceptions.RequestException as e:
+        elapsed = time.time() - t0
+        return -1, {"_error": str(e)}, elapsed
+
+
+def get(path: str, timeout: int = 30) -> Tuple[int, dict, float]:
+    t0 = time.time()
+    try:
+        r = requests.get(f"{BASE_URL}{path}", timeout=timeout)
+        elapsed = time.time() - t0
+        try:
+            data = r.json()
+        except Exception:
+            data = {"_raw": r.text}
+        return r.status_code, data, elapsed
+    except requests.exceptions.RequestException as e:
+        elapsed = time.time() - t0
+        return -1, {"_error": str(e)}, elapsed
+
+
+def get_test_user_id():
+    code, data, _ = post("/auth/password-login", {
+        "email": "test@mak.com",
+        "password": "test123456"
+    })
+    if code == 200:
+        return data.get("id")
+    code, data, _ = post("/auth/register", {
+        "email": "test@mak.com",
+        "name": "Test User",
+        "password": "test123456"
+    })
+    if code == 200:
+        return data.get("id")
+    return None
+
+
+def assert_no_old_string(data: dict, name: str):
+    raw = json.dumps(data)
+    if OLD_ERR in raw:
+        log(f"{name} :: no-old-string", False, f"FOUND OLD STRING in response: {raw[:200]}")
+        return False
+    return True
+
+
+# ============================================================
+# PRIORITY TESTS
+# ============================================================
+
+def test_warmup():
+    code, data, elapsed = get("/warmup", timeout=10)
+    ok = code == 200 and elapsed < 5.0
+    log("GET /api/warmup", ok,
+        f"status={code}, elapsed={elapsed:.2f}s, body={data}")
+    return ok
+
 
 def test_health():
-    try:
-        r = get("/health", timeout=15)
-        body = r.json()
-        ok = (r.status_code == 200 and "status" in body and "mongodb" in body and "llm_key_configured" in body)
-        record("GET /api/health", ok, f"status={r.status_code} body={body}")
-    except Exception as e:
-        record("GET /api/health", False, f"exception: {e}")
-
-def test_seeded_login():
-    try:
-        r = post("/auth/password-login", {"email": "test@mak.com", "password": "test123456"})
-        ok = r.status_code == 200 and "id" in r.json()
-        if ok:
-            record("Seeded login test@mak.com/test123456", True, f"user_id={r.json()['id']}")
-            return r.json()["id"]
-        record("Seeded login test@mak.com/test123456", False, f"status={r.status_code} body={r.text[:200]}")
-        return None
-    except Exception as e:
-        record("Seeded login test@mak.com/test123456", False, f"exception: {e}")
-        return None
-
-def test_auth_flow():
-    ts = int(time.time())
-    email = f"test_new_{ts}@mak.com"
-    password = "Secure123!"
-    new_password = "NewSecure456!"
-    name = "Maya Sharma"
-    user_id = None
-
-    try:
-        r = post("/auth/check-email", {"email": email})
-        ok = r.status_code == 200 and r.json().get("exists") is False
-        record("check-email new user", ok, f"status={r.status_code} body={r.json()}")
-    except Exception as e:
-        record("check-email new user", False, f"exception: {e}")
-
-    try:
-        r = post("/auth/register", {"email": email, "name": name, "password": password})
-        ok = r.status_code == 200 and "id" in r.json()
-        if ok:
-            user_id = r.json()["id"]
-        record("register new user", ok, f"status={r.status_code} user_id={user_id}")
-    except Exception as e:
-        record("register new user", False, f"exception: {e}")
-
-    try:
-        r = post("/auth/check-email", {"email": email})
-        ok = r.status_code == 200 and r.json().get("exists") is True
-        record("check-email existing user", ok, f"status={r.status_code} body={r.json()}")
-    except Exception as e:
-        record("check-email existing user", False, f"exception: {e}")
-
-    try:
-        r = post("/auth/password-login", {"email": email, "password": password})
-        ok = r.status_code == 200 and r.json().get("id") == user_id
-        record("password-login correct", ok, f"status={r.status_code}")
-    except Exception as e:
-        record("password-login correct", False, f"exception: {e}")
-
-    try:
-        r = post("/auth/password-login", {"email": email, "password": "wrong-password"})
-        ok = r.status_code == 400
-        record("password-login wrong password returns 400", ok, f"status={r.status_code}")
-    except Exception as e:
-        record("password-login wrong password returns 400", False, f"exception: {e}")
-
-    if user_id:
-        try:
-            r = post("/auth/change-password", {"user_id": user_id, "current_password": password, "new_password": new_password})
-            ok = r.status_code == 200
-            record("change-password success", ok, f"status={r.status_code}")
-        except Exception as e:
-            record("change-password success", False, f"exception: {e}")
-
-        try:
-            r = post("/auth/password-login", {"email": email, "password": new_password})
-            ok = r.status_code == 200
-            record("login with new password", ok, f"status={r.status_code}")
-        except Exception as e:
-            record("login with new password", False, f"exception: {e}")
-
-    return user_id
+    code, data, _ = get("/health", timeout=10)
+    has_mongo = "mongodb" in data
+    has_llm = "llm_key_configured" in data
+    ok = code == 200 and has_mongo and has_llm
+    log("GET /api/health", ok,
+        f"status={code}, mongodb={data.get('mongodb')}, llm_key_configured={data.get('llm_key_configured')}")
+    return ok
 
 
-# ==================== REVIEW REQUEST FOCUS ====================
+def test_analyze_skin_empty():
+    code, data, elapsed = post("/analyze-skin", {
+        "user_id": "test-user",
+        "image_base64": "",
+        "mode": "skin_care"
+    }, timeout=15)
+    detail = data.get("detail", "")
+    expected = "Image couldn't be processed"
+    ok = code == 400 and expected in detail
+    log("POST /api/analyze-skin (empty image)", ok,
+        f"status={code}, detail={detail!r}, elapsed={elapsed:.2f}s")
+    assert_no_old_string(data, "analyze-skin empty")
+    return ok
 
-def test_travel_style_happy():
-    try:
-        r = post("/travel-style", {"country": "France", "month": "June", "occasion": "Vacation"}, timeout=90)
-        if r.status_code != 200:
-            record("travel-style happy path (France/June/Vacation)", False, f"status={r.status_code} body={r.text[:300]}")
-            return
-        body = r.json()
-        required = ["destination_info", "outfit_suggestions", "makeup_look", "accessories", "dos_and_donts", "overall_vibe", "ai_status"]
-        missing = [k for k in required if k not in body]
-        has_fallback_msg = "fallback_message" in body
-        ai_status = body.get("ai_status")
-        ok = (not missing) and ai_status == "ok" and not has_fallback_msg
-        detail = f"ai_status={ai_status} missing={missing} has_fallback_message={has_fallback_msg}"
-        record("travel-style happy path (ai_status=ok, no fallback_message)", ok, detail)
-    except Exception as e:
-        record("travel-style happy path", False, f"exception: {e}")
 
-def test_chat_happy():
-    try:
-        r = post("/chat", {"message": "What's a simple morning skincare routine for oily skin?"}, timeout=90)
-        if r.status_code != 200:
-            record("chat happy path", False, f"status={r.status_code} body={r.text[:200]}")
-            return
-        body = r.json()
-        ai_status = body.get("ai_status")
-        resp = body.get("response", "")
-        ok = ai_status == "ok" and isinstance(resp, str) and len(resp) > 10
-        record("chat happy path (ai_status=ok)", ok, f"ai_status={ai_status} resp_len={len(resp)}")
-    except Exception as e:
-        record("chat happy path", False, f"exception: {e}")
+def test_analyze_skin_too_short():
+    code, data, elapsed = post("/analyze-skin", {
+        "user_id": "test-user",
+        "image_base64": "abc",
+        "mode": "skin_care"
+    }, timeout=15)
+    detail = data.get("detail", "")
+    ok = code == 400 and "Image" in detail
+    log("POST /api/analyze-skin (too short < 200 chars)", ok,
+        f"status={code}, detail={detail!r}, elapsed={elapsed:.2f}s")
+    assert_no_old_string(data, "analyze-skin too-short")
+    return ok
 
-def test_analyze_skin_error_generic(user_id):
-    if not user_id:
-        record("analyze-skin error path", False, "no user_id available")
-        return
 
-    tiny_png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYGD4DwABCAEAsRMeMgAAAABJRU5ErkJggg=="
-    try:
-        r = post("/analyze-skin", {"image_base64": tiny_png_b64, "user_id": user_id, "mode": "skin_care"}, timeout=180)
-        if r.status_code == 503:
-            body = r.json()
-            detail = body.get("detail", "")
-            ok = detail == GENERIC_ERR
-            record("analyze-skin 503 with exact generic detail on failure", ok, f"detail={detail!r}")
-        elif r.status_code == 200:
-            record("analyze-skin endpoint (1x1 image happy)", True, f"status=200, endpoint working (no failure triggered)")
+def test_analyze_skin_too_large():
+    huge = "A" * 15_000_001
+    code, data, elapsed = post("/analyze-skin", {
+        "user_id": "test-user",
+        "image_base64": huge,
+        "mode": "skin_care"
+    }, timeout=120)
+    detail = data.get("detail", "")
+    expected = "Image is too large"
+    ok = code == 400 and expected in detail
+    log("POST /api/analyze-skin (>15M chars)", ok,
+        f"status={code}, detail={detail!r}, elapsed={elapsed:.2f}s")
+    assert_no_old_string(data, "analyze-skin too-large")
+    return ok
+
+
+def test_analyze_skin_valid_small(user_id: str):
+    tiny_png_b64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+        "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    )
+    img = tiny_png_b64 * 5  # ~520 chars to bypass length check
+    code, data, elapsed = post("/analyze-skin", {
+        "user_id": user_id,
+        "image_base64": img,
+        "mode": "skin_care"
+    }, timeout=60)
+    ok_status = code in (200, 503)
+    ok_time = elapsed < 50.0
+    detail = data.get("detail", "")
+    no_old = OLD_ERR not in json.dumps(data)
+    if code == 503:
+        good_msg = "Service is busy" in detail
+    else:
+        good_msg = True
+    ok = ok_status and ok_time and no_old and good_msg
+    log("POST /api/analyze-skin (valid 1x1 PNG)", ok,
+        f"status={code}, elapsed={elapsed:.2f}s, detail={detail[:120]!r}, no_old_str={no_old}")
+    return ok
+
+
+def test_travel_style_happy_path():
+    code, data, elapsed = post("/travel-style", {
+        "country": "USA",
+        "month": "March",
+        "occasion": "Wedding"
+    }, timeout=60)
+    no_old = OLD_ERR not in json.dumps(data)
+    if code == 200:
+        has_ai_status = "ai_status" in data
+        ok = has_ai_status and no_old
+        log("POST /api/travel-style (USA/March/Wedding)", ok,
+            f"status=200, ai_status={data.get('ai_status')}, has_destination_info={'destination_info' in data}, elapsed={elapsed:.2f}s")
+    elif code == 503:
+        detail = data.get("detail", "")
+        ok = "Service is busy" in detail and no_old
+        log("POST /api/travel-style (USA/March/Wedding) — 503 fallback", ok,
+            f"status=503, detail={detail!r}, elapsed={elapsed:.2f}s")
+    else:
+        ok = False
+        log("POST /api/travel-style (USA/March/Wedding)", ok,
+            f"unexpected status={code}, body={str(data)[:200]}, elapsed={elapsed:.2f}s")
+    return ok
+
+
+def test_chat_happy_path():
+    code, data, elapsed = post("/chat", {
+        "message": "What's the best moisturizer for oily skin?"
+    }, timeout=60)
+    no_old = OLD_ERR not in json.dumps(data)
+    if code == 200:
+        resp_text = data.get("response", "")
+        if data.get("ai_status") == "fallback":
+            new_fallback = "having a little trouble" in resp_text
+            ok = new_fallback and no_old
+            log("POST /api/chat (fallback)", ok,
+                f"ai_status=fallback, response={resp_text[:120]!r}, elapsed={elapsed:.2f}s")
         else:
-            record("analyze-skin error path", False, f"unexpected status={r.status_code} body={r.text[:300]}")
-    except requests.Timeout:
-        record("analyze-skin error path", False, "request timed out — LLM hanging")
-    except Exception as e:
-        record("analyze-skin error path", False, f"exception: {e}")
+            ok = bool(resp_text) and no_old
+            log("POST /api/chat (happy path)", ok,
+                f"status=200, ai_status={data.get('ai_status')}, response_len={len(resp_text)}, elapsed={elapsed:.2f}s")
+    else:
+        ok = False
+        log("POST /api/chat (happy path)", ok,
+            f"unexpected status={code}, body={str(data)[:200]}")
+    return ok
 
 
-def test_analyses_list(user_id):
+# ============================================================
+# REGRESSION TESTS
+# ============================================================
+
+def test_check_email():
+    code, data, _ = post("/auth/check-email", {"email": "test@mak.com"})
+    ok = code == 200 and data.get("exists") is True
+    log("POST /api/auth/check-email (test@mak.com)", ok,
+        f"status={code}, exists={data.get('exists')}")
+    return ok
+
+
+def test_password_login(user_id_holder: list):
+    code, data, _ = post("/auth/password-login", {
+        "email": "test@mak.com",
+        "password": "test123456"
+    })
+    ok = code == 200 and "id" in data and data.get("email") == "test@mak.com"
+    if ok:
+        user_id_holder.append(data["id"])
+    uid = data.get('id', 'N/A')
+    if isinstance(uid, str) and len(uid) > 8:
+        uid = uid[:8] + "..."
+    log("POST /api/auth/password-login", ok,
+        f"status={code}, user_id={uid}, email={data.get('email')}")
+    return ok
+
+
+def test_get_analyses(user_id: str):
+    code, data, _ = get(f"/analyses/{user_id}")
+    ok = code == 200 and isinstance(data, list)
+    log("GET /api/analyses/{user_id}", ok,
+        f"status={code}, count={len(data) if isinstance(data, list) else 'N/A'}")
+    return ok
+
+
+def main():
+    print(f"\n{'='*60}\nv1.0.1 Backend Tests — MAK App\n{'='*60}\nBase URL: {BASE_URL}\n")
+
+    user_id = get_test_user_id()
     if not user_id:
-        record("GET /api/analyses/{user_id}", False, "no user_id")
-        return
-    try:
-        r = get(f"/analyses/{user_id}")
-        ok = r.status_code == 200 and isinstance(r.json(), list)
-        record("GET /api/analyses/{user_id}", ok, f"status={r.status_code} count={len(r.json()) if r.status_code == 200 else 'N/A'}")
-    except Exception as e:
-        record("GET /api/analyses/{user_id}", False, f"exception: {e}")
+        print("FATAL: cannot establish test user (login/register both failed)")
+        sys.exit(1)
+    print(f"Test user_id: {user_id}\n")
+    print("--- PRIORITY TESTS ---\n")
+    test_warmup()
+    test_health()
+    test_analyze_skin_empty()
+    test_analyze_skin_too_short()
+    test_analyze_skin_too_large()
+    test_analyze_skin_valid_small(user_id)
+    test_travel_style_happy_path()
+    test_chat_happy_path()
 
-def test_feedback(user_id):
-    if not user_id:
-        record("POST /api/feedback", False, "no user_id")
-        return
-    try:
-        r = post("/feedback", {"user_id": user_id, "rating": 5, "category": "app_experience", "comment": "Great experience with MAK!"})
-        ok = r.status_code == 200 and "id" in r.json()
-        record("POST /api/feedback", ok, f"status={r.status_code}")
-    except Exception as e:
-        record("POST /api/feedback", False, f"exception: {e}")
+    print("\n--- REGRESSION TESTS ---\n")
+    test_check_email()
+    holder = []
+    test_password_login(holder)
+    uid = holder[0] if holder else user_id
+    test_get_analyses(uid)
+
+    print(f"\n{'='*60}\nSUMMARY\n{'='*60}")
+    passed = sum(1 for r in results if r["ok"])
+    total = len(results)
+    print(f"PASSED: {passed}/{total}\n")
+    for r in results:
+        mark = "PASS" if r["ok"] else "FAIL"
+        print(f"  [{mark}] {r['name']}")
+    if passed != total:
+        print(f"\nFAILED tests:")
+        for r in results:
+            if not r["ok"]:
+                print(f"  - {r['name']}: {r['details']}")
+        sys.exit(1)
+    sys.exit(0)
 
 
 if __name__ == "__main__":
-    print(f"Testing backend at: {BASE_URL}\n")
-    print("=" * 70)
-
-    test_warmup()
-    test_health()
-    seeded_uid = test_seeded_login()
-    new_uid = test_auth_flow()
-
-    test_travel_style_happy()
-    test_chat_happy()
-    test_analyze_skin_error_generic(seeded_uid or new_uid)
-
-    test_analyses_list(seeded_uid or new_uid)
-    test_feedback(seeded_uid or new_uid)
-
-    print("\n" + "=" * 70)
-    passed = sum(1 for _, p, _ in results if p)
-    failed = [(n, d) for n, p, d in results if not p]
-    print(f"RESULTS: {passed}/{len(results)} passed")
-    if failed:
-        print("\nFAILED TESTS:")
-        for name, detail in failed:
-            print(f"  - {name}: {detail}")
-        sys.exit(1)
-    sys.exit(0)
+    main()

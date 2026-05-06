@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
+import { STRINGS } from '../constants/strings';
 
 interface Props {
   text?: string;
@@ -10,7 +11,7 @@ interface Props {
 }
 
 export function MakInfoBanner({
-  text = 'First scan after install may take up to 30 seconds — that\u2019s normal ✨',
+  text = STRINGS.banners.firstScanHint,
   iconName = 'information-circle-outline',
   variant = 'primary',
 }: Props) {
@@ -38,7 +39,7 @@ export function MakInfoBanner({
     <View style={[styles.banner, { backgroundColor: bgColor }]} accessibilityRole="alert">
       <Ionicons name={iconName} size={18} color={iconColor} style={styles.icon} />
       <Text
-        style={[styles.text, { color: colors.text }]}
+        style={[styles.text, { color: colors.text, writingDirection: 'ltr' }]}
         allowFontScaling
       >
         {text}

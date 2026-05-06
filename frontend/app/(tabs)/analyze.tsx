@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput, FlatList, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -10,6 +10,10 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
 import { api } from '../../src/services/api';
 import { getStates, getCities } from '../../src/data/locations';
+import { MakErrorSheet, MakErrorVariant } from '../../src/components/MakErrorSheet';
+import { MakLoadingRotator } from '../../src/components/MakLoadingRotator';
+import { MakInfoBanner } from '../../src/components/MakInfoBanner';
+import { mapErrorToVariant, AnalyzeMode as LoadingMode } from '../../src/constants/strings';
 
 type Mode = 'skin_care' | 'makeup' | 'travel';
 
@@ -72,6 +76,16 @@ export default function AnalyzeScreen() {
   const [countrySearch, setCountrySearch] = useState('');
   const [travelResult, setTravelResult] = useState<any>(null);
   const [travelLoading, setTravelLoading] = useState(false);
+  // Error sheet state — replaces Alert.alert("Oops!", ...)
+  const [errorVariant, setErrorVariant] = useState<MakErrorVariant | null>(null);
+  // Track which action triggered the error so Try Again retries the right call
+  const [pendingRetryAction, setPendingRetryAction] = useState<'analyze' | 'travel' | null>(null);
+
+  // Re-warmup the backend whenever the Analyze tab is opened — kills cold-start latency
+  // (Initial warmup happens at app launch in _layout.tsx; this re-warms if user returns later.)
+  useEffect(() => {
+    api.warmup().catch(() => {});
+  }, []);
 
   const filteredCountries = COUNTRIES.filter(c => c.name.toLowerCase().includes(countrySearch.toLowerCase()));
   const availableStates = selectedCountry ? getStates(selectedCountry) : [];
@@ -99,28 +113,71 @@ export default function AnalyzeScreen() {
   const clearImage = () => { setImageUri(null); setImageBase64(null); };
 
   const analyzeImage = async () => {
-    if (!imageBase64 || !user?.id) { Alert.alert('Error', 'Please select or take a photo first'); return; }
+    if (!imageBase64 || !user?.id) {
+      // Soft inline error for missing photo (not an LLM failure)
+      setErrorVariant('badImage');
+      setPendingRetryAction('analyze');
+      return;
+    }
     setAnalyzing(true);
+    setErrorVariant(null);
     try {
       const result = await api.analyzeSkin(imageBase64, user.id, mode);
       router.push({ pathname: '/analysis-result', params: { analysisId: result.id, mode } });
     } catch (err: any) {
-      const detail = err?.response?.data?.detail;
-      Alert.alert('Oops!', detail || 'Sorry we are experiencing issues, please try again in some time.');
-    } finally { setAnalyzing(false); }
+      // Map error to a user-friendly variant — never expose status codes
+      const variant = mapErrorToVariant(err);
+      setErrorVariant(variant);
+      setPendingRetryAction('analyze');
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const getTravelSuggestions = async () => {
-    if (!selectedCountry || !selectedMonth || !selectedOccasion) { Alert.alert('Missing Info', 'Please select country, month, and occasion.'); return; }
+    if (!selectedCountry || !selectedMonth || !selectedOccasion) {
+      Alert.alert('Missing Info', 'Please select country, month, and occasion.');
+      return;
+    }
     setTravelLoading(true);
+    setErrorVariant(null);
     const location = [selectedCity, selectedState, selectedCountry].filter(Boolean).join(', ');
     try {
       const result = await api.getTravelStyle(location, selectedMonth, selectedOccasion, user?.id);
       setTravelResult(result);
     } catch (err: any) {
-      const detail = err?.response?.data?.detail;
-      Alert.alert('Oops!', detail || 'Sorry we are experiencing issues, please try again in some time.');
-    } finally { setTravelLoading(false); }
+      const variant = mapErrorToVariant(err);
+      setErrorVariant(variant);
+      setPendingRetryAction('travel');
+    } finally {
+      setTravelLoading(false);
+    }
+  };
+
+  // Map analyze.tsx mode -> loading rotator mode key
+  const loadingMode: LoadingMode = mode === 'skin_care' ? 'skinCare' : mode === 'makeup' ? 'makeup' : 'travel';
+  const isLoading = analyzing || travelLoading;
+
+  const handleErrorPrimary = () => {
+    const action = pendingRetryAction;
+    setErrorVariant(null);
+    if (action === 'analyze') {
+      // For badImage variant, primary CTA is "Choose Another Photo" — clear instead of retry
+      if (errorVariant === 'badImage') {
+        clearImage();
+      } else {
+        setTimeout(() => analyzeImage(), 100);
+      }
+    } else if (action === 'travel') {
+      setTimeout(() => getTravelSuggestions(), 100);
+    }
+  };
+
+  const handleErrorSecondary = () => {
+    setErrorVariant(null);
+    if (pendingRetryAction === 'analyze') {
+      clearImage();
+    }
   };
 
   if (cameraMode) {
@@ -166,6 +223,11 @@ export default function AnalyzeScreen() {
               </TouchableOpacity>
             </React.Fragment>
           ))}
+        </View>
+
+        {/* Persistent first-scan hint banner — applies to all modes */}
+        <View style={s.infoBannerWrap}>
+          <MakInfoBanner />
         </View>
 
         {/* SKIN CARE / MAKEUP MODES */}
@@ -227,7 +289,7 @@ export default function AnalyzeScreen() {
           <>
             <View style={[s.infoBanner, { backgroundColor: colors.accentLight, borderColor: colors.accent + '30' }]}>
               <Ionicons name="airplane" size={18} color={colors.accent} />
-              <Text style={[s.infoBannerText, { color: colors.text }]}>Travelling and not sure what to wear or how to do your makeup? Tell us where, when, and why — we'll style you!</Text>
+              <Text style={[s.infoBannerText, { color: colors.text }]}>{`Travelling and not sure what to wear or how to do your makeup? Tell us where, when, and why — we'll style you!`}</Text>
             </View>
 
             {/* Country Picker */}
@@ -423,6 +485,23 @@ export default function AnalyzeScreen() {
           </View>
         </View>
       </Modal>
+      {/* Full-screen loading overlay — shown during analyze/travel */}
+      <Modal visible={isLoading} transparent animationType="fade" statusBarTranslucent>
+        <View style={[s.loadingOverlay, { backgroundColor: colors.overlay }]}>
+          <View style={[s.loadingCard, { backgroundColor: colors.surface }]}>
+            <MakLoadingRotator mode={loadingMode} />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Error sheet — replaces the old Alert.alert("Oops!", ...) */}
+      <MakErrorSheet
+        visible={errorVariant !== null}
+        variant={errorVariant ?? 'generic'}
+        onClose={() => setErrorVariant(null)}
+        onPrimaryPress={handleErrorPrimary}
+        onSecondaryPress={handleErrorSecondary}
+      />
     </SafeAreaView>
   );
 }
@@ -443,6 +522,10 @@ const s = StyleSheet.create({
   // Info Banner
   infoBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: 12, marginBottom: 18, borderWidth: 1 },
   infoBannerText: { flex: 1, fontSize: 13, lineHeight: 19 },
+  infoBannerWrap: { marginBottom: 18 },
+  // Loading Overlay
+  loadingOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
+  loadingCard: { width: '100%', maxWidth: 380, borderRadius: 24, paddingVertical: 36, paddingHorizontal: 24, alignItems: 'center', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 12 },
   // Upload
   uploadArea: { borderRadius: 20, padding: 32, alignItems: 'center', borderWidth: 2, borderStyle: 'dashed', marginBottom: 18 },
   uploadIcon: { width: 70, height: 70, borderRadius: 35, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },

@@ -76,13 +76,17 @@ async def llm_with_timeout(coro, timeout_seconds=30):
     try:
         return await asyncio.wait_for(coro, timeout=timeout_seconds)
     except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Sorry we are experiencing issues, please try again in some time.")
+        # 504 \u2014 frontend maps to 'timeout' variant
+        raise HTTPException(status_code=504, detail="Request timed out.")
 
-async def llm_call_resilient(chat_factory, user_message, first_timeout=20, retry_timeout=35):
+async def llm_call_resilient(chat_factory, user_message, first_timeout=18, retry_timeout=25):
     """Run an LLM call with two-phase resilience:
     1. First attempt: strict timeout for fast failure
     2. On timeout/failure: retry once with longer timeout
     Returns (response_text, status) where status is 'ok', 'retried', or 'failed'
+
+    NOTE: Total max time = first_timeout + 0.5s + retry_timeout = ~43s
+    Frontend axios timeout is 60s, leaving ~17s safety margin.
     """
     # Attempt 1: strict timeout
     try:
@@ -107,7 +111,7 @@ async def db_with_timeout(coro, timeout_seconds=10):
     try:
         return await asyncio.wait_for(coro, timeout=timeout_seconds)
     except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Sorry we are experiencing issues, please try again in some time.")
+        raise HTTPException(status_code=504, detail="Request timed out.")
 
 # ==================== MODELS ====================
 
@@ -210,6 +214,18 @@ otp_store: Dict[str, str] = {}
 
 async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Dict[str, Any]:
     """Use GPT-4o Vision to analyze skin/makeup from image"""
+    # Image size validation \u2014 returns 400 if invalid (frontend maps to 'badImage' variant)
+    if not image_base64 or len(image_base64) < 200:
+        raise HTTPException(
+            status_code=400,
+            detail="Image couldn't be processed. Please use a clear photo."
+        )
+    if len(image_base64) > 15_000_000:  # ~10MB binary
+        raise HTTPException(
+            status_code=400,
+            detail="Image is too large. Please use a smaller photo."
+        )
+    
     try:
         if mode == "makeup":
             system_msg = """You are a warm, experienced makeup artist speaking directly to a client.
@@ -303,16 +319,18 @@ async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Di
             file_contents=[image_content]
         )
         
-        # Resilient LLM call: strict timeout first, then retry with longer timeout
+        # Resilient LLM call: uses tuned defaults (18s + 25s retry = ~43s max)
+        # Frontend axios timeout is 60s, so we have ~17s safety buffer.
         response, status = await llm_call_resilient(
             chat_factory,
             user_message,
-            first_timeout=25,
-            retry_timeout=40,
         )
         if response is None:
-            # Both attempts failed - fall through to except block via raising
-            raise Exception("LLM unavailable after retry")
+            # Both attempts failed \u2014 return 503 (frontend maps to 'busy' variant)
+            raise HTTPException(
+                status_code=503,
+                detail="Service is busy. Please try again."
+            )
         logger.info(f"AI Response received (status={status}): {response[:200]}...")
         
         # Parse JSON response
@@ -330,12 +348,15 @@ async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Di
         analysis = json.loads(clean_response)
         return analysis
         
+    except HTTPException:
+        # Re-raise our explicit HTTPExceptions (400 / 503 / 504) — keeps status codes intact
+        raise
     except Exception as e:
         logger.error(f"Analysis error: {str(e)}")
-        # Raise so frontend shows a clean error to the user (no silent fake data)
+        # Generic LLM/parsing failure — 503 maps to 'busy' on the frontend
         raise HTTPException(
             status_code=503,
-            detail="Sorry we are experiencing issues, please try again in some time."
+            detail="Service is busy. Please try again."
         )
 
 # ==================== APP INSTALL TRACKING ====================
@@ -948,15 +969,16 @@ async def get_travel_style(data: TravelStyleRequest):
             text=f"I'm travelling to {data.country} in {data.month} for a {data.occasion}. Give me specific outfit and makeup recommendations for THIS exact location, considering the typical weather there in {data.month}, local cultural expectations, and the occasion. Be specific to this destination - don't give generic advice. Return ONLY valid JSON."
         )
         
-        # Resilient: strict 20s first, retry with 35s
+        # Resilient: uses tuned defaults (18s + 25s retry = ~43s max)
         response, status = await llm_call_resilient(
             chat_factory,
             user_message,
-            first_timeout=20,
-            retry_timeout=35,
         )
         if response is None:
-            raise Exception("LLM unavailable after retry")
+            raise HTTPException(
+                status_code=503,
+                detail="Service is busy. Please try again."
+            )
         
         import json
         clean = response.strip()
@@ -967,11 +989,14 @@ async def get_travel_style(data: TravelStyleRequest):
         result["ai_status"] = status
         return result
         
+    except HTTPException:
+        # Re-raise our explicit HTTPExceptions
+        raise
     except Exception as e:
         logger.error(f"Travel style error: {str(e)}")
         raise HTTPException(
             status_code=503,
-            detail="Sorry we are experiencing issues, please try again in some time."
+            detail="Service is busy. Please try again."
         )
 
 # ==================== CHATBOT ENDPOINT ====================
@@ -1047,7 +1072,7 @@ async def chat_with_mak(data: ChatMessage):
             except Exception as e2:
                 logger.error(f"Chat retry failed: {str(e2)[:100]}")
                 return {
-                    "response": "Sorry we are experiencing issues, please try again in some time.",
+                    "response": "I\u2019m having a little trouble responding right now \u2014 give it a moment and try again \u2728",
                     "session_id": session_id,
                     "ai_status": "fallback",
                 }
@@ -1062,7 +1087,7 @@ async def chat_with_mak(data: ChatMessage):
         
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
-        return {"response": "Sorry we are experiencing issues, please try again in some time.", "session_id": data.session_id, "ai_status": "fallback"}
+        return {"response": "I\u2019m having a little trouble responding right now \u2014 give it a moment and try again \u2728", "session_id": data.session_id, "ai_status": "fallback"}
 
 @api_router.get("/")
 async def root():

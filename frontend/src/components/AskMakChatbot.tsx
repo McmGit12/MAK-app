@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
+import { STRINGS } from '../constants/strings';
 import { api } from '../services/api';
 
 interface Message {
@@ -82,7 +83,7 @@ export default function AskMakChatbot({ tabBarHeight = 70 }: { tabBarHeight?: nu
       const botMsg: Message = { id: (Date.now() + 1).toString(), text: res.response, isUser: false, timestamp: new Date() };
       setMessages(prev => [...prev, botMsg]);
     } catch (err) {
-      const errMsg: Message = { id: (Date.now() + 1).toString(), text: "Sorry we are experiencing issues, please try again in some time.", isUser: false, timestamp: new Date() };
+      const errMsg: Message = { id: (Date.now() + 1).toString(), text: STRINGS.chat.errorMessage, isUser: false, timestamp: new Date() };
       setMessages(prev => [...prev, errMsg]);
     } finally {
       setSending(false);
