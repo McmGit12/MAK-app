@@ -61,7 +61,7 @@ export const STRINGS = {
       'Almost done \u2014 adding final touches \u2728',
     ],
     makeup: [
-      'Analyzing your features...',
+      'Analyzing your face...',
       'Studying your tone & undertone...',
       'Curating makeup ideas just for you...',
       'Almost done \u2014 adding final touches \u2728',
