@@ -38,6 +38,11 @@ export const STRINGS = {
       body: 'For the best results, use a clear, well-lit photo with your face centered and visible.',
       primaryCta: 'Choose Another Photo',
     },
+    cannotAnalyze: {
+      title: 'Couldn\u2019t read this photo',
+      body: 'Try a brighter, front-facing selfie with your full face visible \u2014 no filters, sunglasses, or heavy shadows. That usually does the trick \u2728',
+      primaryCta: 'Choose Another Photo',
+    },
     network: {
       title: 'Connection hiccup',
       body: 'We can\u2019t reach our servers right now. Check your internet and tap below.',
@@ -118,7 +123,10 @@ export function mapErrorToVariant(err: unknown): keyof typeof STRINGS.errors {
 
   const status = error.response.status;
 
-  if (status === 400 || status === 422) return 'badImage';
+  // 422 = AI couldn't analyze the photo (content-policy refusal). Distinct from
+  // 400 which is image-validation (empty/oversized). Show actionable copy.
+  if (status === 422) return 'cannotAnalyze';
+  if (status === 400) return 'badImage';
   if (status === 503) return 'busy';
   if (status === 504) return 'timeout';
   if (status === 408) return 'timeout';

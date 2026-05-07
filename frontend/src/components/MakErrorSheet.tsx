@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { STRINGS } from '../constants/strings';
 
-export type MakErrorVariant = 'busy' | 'timeout' | 'badImage' | 'network' | 'generic';
+export type MakErrorVariant = 'busy' | 'timeout' | 'badImage' | 'network' | 'generic' | 'cannotAnalyze';
 
 interface VariantVisualConfig {
   iconName: keyof typeof Ionicons.glyphMap;
@@ -28,6 +28,7 @@ const VARIANT_VISUALS: Record<MakErrorVariant, VariantVisualConfig> = {
   badImage: { iconName: 'image-outline', iconColorKey: 'accent' },
   network: { iconName: 'wifi-outline', iconColorKey: 'tertiary' },
   generic: { iconName: 'refresh-outline', iconColorKey: 'primary' },
+  cannotAnalyze: { iconName: 'eye-off-outline', iconColorKey: 'accent' },
 };
 
 interface Props {

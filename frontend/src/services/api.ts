@@ -169,6 +169,24 @@ export const api = {
     return response.data;
   },
 
+  // ============================================================
+  // LOCATION DATA — backend-served (saves ~7-8MB from APK bundle vs
+  // bundling country-state-city library directly). Frontend caches
+  // results in memory, so each unique fetch only happens once per session.
+  // ============================================================
+  getCountries: async (): Promise<Array<{ name: string; isoCode: string; flag: string }>> => {
+    const response = await apiClient.get('/locations/countries', { timeout: 15000 });
+    return response.data;
+  },
+  getStates: async (countryCode: string): Promise<Array<{ name: string; isoCode: string }>> => {
+    const response = await apiClient.get(`/locations/states/${countryCode}`, { timeout: 10000 });
+    return response.data;
+  },
+  getCities: async (countryCode: string, stateCode: string): Promise<Array<{ name: string }>> => {
+    const response = await apiClient.get(`/locations/cities/${countryCode}/${stateCode}`, { timeout: 10000 });
+    return response.data;
+  },
+
   // Chatbot
   chatWithMak: async (message: string, sessionId?: string) => {
     const response = await apiClient.post('/chat', { message, session_id: sessionId });

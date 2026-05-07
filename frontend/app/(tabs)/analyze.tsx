@@ -6,7 +6,6 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Image } from 'expo-image';
-import { Country, State, City, ICountry, IState, ICity } from 'country-state-city';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
 import { api } from '../../src/services/api';
@@ -16,6 +15,19 @@ import { MakInfoBanner } from '../../src/components/MakInfoBanner';
 import { mapErrorToVariant, AnalyzeMode as LoadingMode } from '../../src/constants/strings';
 
 type Mode = 'skin_care' | 'makeup' | 'travel';
+type ICountry = { name: string; isoCode: string; flag: string };
+type IState = { name: string; isoCode: string };
+type ICity = { name: string };
+
+// ============================================================
+// Module-level in-memory cache for location data — populated once per app
+// session via the backend API. This avoids re-fetching when the picker is
+// re-opened. Memory cost: tiny (~50KB countries + ~5KB per state load +
+// ~50KB per city load, only for the country/state the user actually picks).
+// ============================================================
+let _countriesCache: ICountry[] | null = null;
+const _statesCache: Map<string, IState[]> = new Map();
+const _citiesCache: Map<string, ICity[]> = new Map();
 
 const DISCLAIMER = 'We respect your privacy and do not store any personal data. Results are for informational purposes only — try at your own discretion.';
 
@@ -73,11 +85,82 @@ export default function AnalyzeScreen() {
     api.warmup().catch(() => {});
   }, []);
 
-  // All countries loaded once from country-state-city library (~250 countries).
-  // Memoized so sorting only happens once per component lifetime.
-  const allCountries: ICountry[] = useMemo(() => {
-    return Country.getAllCountries().sort((a, b) => a.name.localeCompare(b.name));
-  }, []);
+  // ============================================================
+  // Location data — fetched lazily from backend (was bundled npm library
+  // in earlier builds, which added ~7-8MB to the APK).
+  // - Countries: fetched once on first open, cached for session
+  // - States: fetched once per country, cached
+  // - Cities: fetched once per (country, state), cached
+  // ============================================================
+  const [allCountries, setAllCountries] = useState<ICountry[]>([]);
+  const [countriesLoading, setCountriesLoading] = useState(false);
+  const [availableStates, setAvailableStates] = useState<IState[]>([]);
+  const [statesLoading, setStatesLoading] = useState(false);
+  const [availableCities, setAvailableCities] = useState<ICity[]>([]);
+  const [citiesLoading, setCitiesLoading] = useState(false);
+
+  // Fetch countries once (only when Travel mode becomes active to keep app launch fast)
+  useEffect(() => {
+    if (mode !== 'travel') return;
+    if (_countriesCache) {
+      setAllCountries(_countriesCache);
+      return;
+    }
+    setCountriesLoading(true);
+    api.getCountries()
+      .then((data) => {
+        _countriesCache = data;
+        setAllCountries(data);
+      })
+      .catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn('[locations] failed to load countries:', e);
+      })
+      .finally(() => setCountriesLoading(false));
+  }, [mode]);
+
+  // Fetch states whenever a country is selected
+  useEffect(() => {
+    if (!selectedCountryCode) {
+      setAvailableStates([]);
+      return;
+    }
+    const cached = _statesCache.get(selectedCountryCode);
+    if (cached) {
+      setAvailableStates(cached);
+      return;
+    }
+    setStatesLoading(true);
+    api.getStates(selectedCountryCode)
+      .then((data) => {
+        _statesCache.set(selectedCountryCode, data);
+        setAvailableStates(data);
+      })
+      .catch(() => setAvailableStates([]))
+      .finally(() => setStatesLoading(false));
+  }, [selectedCountryCode]);
+
+  // Fetch cities whenever a state is selected
+  useEffect(() => {
+    if (!selectedCountryCode || !selectedStateCode) {
+      setAvailableCities([]);
+      return;
+    }
+    const key = `${selectedCountryCode}|${selectedStateCode}`;
+    const cached = _citiesCache.get(key);
+    if (cached) {
+      setAvailableCities(cached);
+      return;
+    }
+    setCitiesLoading(true);
+    api.getCities(selectedCountryCode, selectedStateCode)
+      .then((data) => {
+        _citiesCache.set(key, data);
+        setAvailableCities(data);
+      })
+      .catch(() => setAvailableCities([]))
+      .finally(() => setCitiesLoading(false));
+  }, [selectedCountryCode, selectedStateCode]);
 
   const filteredCountries = useMemo(() => {
     const q = countrySearch.trim().toLowerCase();
@@ -85,21 +168,11 @@ export default function AnalyzeScreen() {
     return allCountries.filter((c) => c.name.toLowerCase().includes(q));
   }, [countrySearch, allCountries]);
 
-  const availableStates: IState[] = useMemo(() => {
-    if (!selectedCountryCode) return [];
-    return State.getStatesOfCountry(selectedCountryCode).sort((a, b) => a.name.localeCompare(b.name));
-  }, [selectedCountryCode]);
-
   const filteredStates = useMemo(() => {
     const q = stateSearch.trim().toLowerCase();
     if (!q) return availableStates;
     return availableStates.filter((s) => s.name.toLowerCase().includes(q));
   }, [stateSearch, availableStates]);
-
-  const availableCities: ICity[] = useMemo(() => {
-    if (!selectedCountryCode || !selectedStateCode) return [];
-    return City.getCitiesOfState(selectedCountryCode, selectedStateCode).sort((a, b) => a.name.localeCompare(b.name));
-  }, [selectedCountryCode, selectedStateCode]);
 
   const filteredCities = useMemo(() => {
     const q = citySearch.trim().toLowerCase();
@@ -434,34 +507,41 @@ export default function AnalyzeScreen() {
               <Ionicons name="search" size={18} color={colors.textTertiary} />
               <TextInput style={[s.searchInput, { color: colors.text }]} placeholder="Search countries..." placeholderTextColor={colors.textTertiary} value={countrySearch} onChangeText={setCountrySearch} />
             </View>
-            <FlatList
-              data={filteredCountries}
-              keyExtractor={(i) => i.isoCode}
-              keyboardShouldPersistTaps="handled"
-              initialNumToRender={20}
-              windowSize={10}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[s.countryRow, { borderBottomColor: colors.borderLight }]}
-                  onPress={() => {
-                    setSelectedCountry(item.name);
-                    setSelectedCountryCode(item.isoCode);
-                    // Reset state/city when country changes
-                    setSelectedState('');
-                    setSelectedStateCode('');
-                    setSelectedCity('');
-                    setStateSearch('');
-                    setCitySearch('');
-                    setShowCountryPicker(false);
-                    setCountrySearch('');
-                  }}
-                >
-                  <Text style={s.countryFlag}>{item.flag}</Text>
-                  <Text style={[s.countryName, { color: colors.text }]}>{item.name}</Text>
-                  {selectedCountry === item.name && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
-                </TouchableOpacity>
-              )}
-            />
+            {countriesLoading && allCountries.length === 0 ? (
+              <View style={s.emptyListWrap}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={[s.emptyListText, { color: colors.textSecondary }]}>Loading countries...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={filteredCountries}
+                keyExtractor={(i) => i.isoCode}
+                keyboardShouldPersistTaps="handled"
+                initialNumToRender={20}
+                windowSize={10}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[s.countryRow, { borderBottomColor: colors.borderLight }]}
+                    onPress={() => {
+                      setSelectedCountry(item.name);
+                      setSelectedCountryCode(item.isoCode);
+                      // Reset state/city when country changes
+                      setSelectedState('');
+                      setSelectedStateCode('');
+                      setSelectedCity('');
+                      setStateSearch('');
+                      setCitySearch('');
+                      setShowCountryPicker(false);
+                      setCountrySearch('');
+                    }}
+                  >
+                    <Text style={s.countryFlag}>{item.flag}</Text>
+                    <Text style={[s.countryName, { color: colors.text }]}>{item.name}</Text>
+                    {selectedCountry === item.name && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+                  </TouchableOpacity>
+                )}
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -496,7 +576,12 @@ export default function AnalyzeScreen() {
               <Ionicons name="search" size={18} color={colors.textTertiary} />
               <TextInput style={[s.searchInput, { color: colors.text }]} placeholder="Search states..." placeholderTextColor={colors.textTertiary} value={stateSearch} onChangeText={setStateSearch} />
             </View>
-            {availableStates.length === 0 ? (
+            {statesLoading ? (
+              <View style={s.emptyListWrap}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={[s.emptyListText, { color: colors.textSecondary }]}>Loading states...</Text>
+              </View>
+            ) : availableStates.length === 0 ? (
               <View style={s.emptyListWrap}>
                 <Ionicons name="information-circle-outline" size={28} color={colors.textTertiary} />
                 <Text style={[s.emptyListText, { color: colors.textSecondary }]}>No states available for this country. You can still style by country alone.</Text>
@@ -544,7 +629,12 @@ export default function AnalyzeScreen() {
               <Ionicons name="search" size={18} color={colors.textTertiary} />
               <TextInput style={[s.searchInput, { color: colors.text }]} placeholder="Search cities..." placeholderTextColor={colors.textTertiary} value={citySearch} onChangeText={setCitySearch} />
             </View>
-            {availableCities.length === 0 ? (
+            {citiesLoading ? (
+              <View style={s.emptyListWrap}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={[s.emptyListText, { color: colors.textSecondary }]}>Loading cities...</Text>
+              </View>
+            ) : availableCities.length === 0 ? (
               <View style={s.emptyListWrap}>
                 <Ionicons name="information-circle-outline" size={28} color={colors.textTertiary} />
                 <Text style={[s.emptyListText, { color: colors.textSecondary }]}>No cities available for this state. You can still style by state alone.</Text>

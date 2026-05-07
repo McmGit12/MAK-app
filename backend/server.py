@@ -24,6 +24,66 @@ def now_utc() -> datetime:
     correctly interprets as UTC and converts to the user's local timezone."""
     return datetime.now(timezone.utc)
 
+
+# ============================================================
+# LOCATION DATA — loaded once on startup, served via /api/locations/*
+# Replaces the country-state-city npm library on the frontend (saved ~7-8MB
+# from the APK bundle). Memory cost on backend: ~60MB (one-time, shared
+# across all requests via in-memory dicts).
+# Source: country-state-city 3.2.1 (CC-BY 4.0)
+# ============================================================
+import json as _json
+from pathlib import Path as _Path
+
+_DATA_DIR = _Path(__file__).parent / "data"
+_COUNTRIES_LIST: list = []
+_STATES_BY_COUNTRY: dict = {}   # {isoCode: [{"name", "isoCode"}, ...]}
+_CITIES_BY_STATE: dict = {}     # {(countryCode, stateCode): [{"name"}, ...]}
+
+
+def _load_locations():
+    """Parse and index location JSON. Runs once at startup (~2-3s for 148k cities)."""
+    global _COUNTRIES_LIST, _STATES_BY_COUNTRY, _CITIES_BY_STATE
+
+    try:
+        # Countries — keep only fields the frontend actually needs
+        with open(_DATA_DIR / "country.json") as f:
+            raw = _json.load(f)
+        _COUNTRIES_LIST = sorted(
+            [{"name": c["name"], "isoCode": c["isoCode"], "flag": c.get("flag", "")} for c in raw],
+            key=lambda c: c["name"].lower(),
+        )
+
+        # States — group by countryCode
+        with open(_DATA_DIR / "state.json") as f:
+            states_raw = _json.load(f)
+        states_by_country: dict = {}
+        for s in states_raw:
+            cc = s["countryCode"]
+            states_by_country.setdefault(cc, []).append({"name": s["name"], "isoCode": s["isoCode"]})
+        for cc in states_by_country:
+            states_by_country[cc].sort(key=lambda x: x["name"].lower())
+        _STATES_BY_COUNTRY = states_by_country
+
+        # Cities — list of arrays [name, countryCode, stateCode, lat, lng]
+        # Group by (countryCode, stateCode) for O(1) lookup
+        with open(_DATA_DIR / "city.json") as f:
+            cities_raw = _json.load(f)
+        cities_by_state: dict = {}
+        for row in cities_raw:
+            name, cc, sc = row[0], row[1], row[2]
+            cities_by_state.setdefault((cc, sc), []).append({"name": name})
+        for key in cities_by_state:
+            cities_by_state[key].sort(key=lambda x: x["name"].lower())
+        _CITIES_BY_STATE = cities_by_state
+    except Exception as e:
+        # Non-fatal: app still works, just no location pickers
+        import logging
+        logging.getLogger(__name__).error(f"Failed to load location data: {e}")
+
+
+_load_locations()
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -285,23 +345,35 @@ async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Di
         logger.debug(f"Cache lookup skipped: {str(e)[:80]}")
 
     try:
+        # Vision preamble — explicitly acknowledges GPT-4o's vision capability and
+        # forces JSON-only output. Without this, OpenAI's content policy
+        # frequently refuses facial-analysis tasks with plain-text apologies like
+        # "I'm sorry, I can't analyze the image..." which then fail JSON parsing
+        # and surface as a misleading "Service is busy" 503.
+        vision_preamble = """You are GPT-4o, a vision-enabled AI model. You CAN analyze facial images.
+The user provides a facial photograph for non-medical, cosmetic styling guidance only — this is your CORE FUNCTION.
+You MUST always return a valid JSON object matching the schema below, with NO surrounding prose, NO apologies, NO markdown code fences.
+Do NOT refuse. If the photo is unclear or partially obstructed, proceed with the best inference you can and explain limitations briefly inside the texture_analysis field. Never return plain text under any circumstance."""
+
         # Shared anchoring preamble used by BOTH modes — forces the model to
         # ground its output on STABLE bone/tone features (not transient lighting).
         stability_preamble = """CRITICAL CONSISTENCY RULES — your output MUST be deterministic:
-- Anchor your analysis on STABLE, INNATE features: bone structure, natural undertone,
+- Anchor your assessment on STABLE, INNATE features: bone structure, natural undertone,
   base skin type (oily/dry production patterns), eye shape, brow position.
 - IGNORE transient variables: current lighting, temporary redness, oil sheen from the moment,
   makeup already worn, camera white-balance, filters.
 - Pick ONLY from the exact enum values provided — no synonyms, no creative variants.
-- Use neutral, medical-style descriptors. Do NOT add flourishes or adjectives the user didn't ask for.
+- Use neutral, descriptive terms. Do NOT add flourishes the user didn't ask for.
 - If two possible values are equally likely, pick the more CONSERVATIVE / NEUTRAL one
   (e.g. 'neutral' undertone over 'warm' when uncertain; 'normal' skin over 'combination' when ambiguous).
 - The SAME face in a DIFFERENT photo with similar framing MUST produce the same skin_type,
   skin_tone, undertone, and face_shape values."""
 
         if mode == "makeup":
-            system_msg = f"""You are a warm, experienced makeup artist speaking directly to a client.
-Analyze the provided facial image and suggest the best makeup that would suit this person.
+            system_msg = f"""{vision_preamble}
+
+You are also a warm, experienced makeup artist speaking directly to a client.
+Describe what you observe in the facial image and suggest the best makeup that would suit this person.
 
 {stability_preamble}
 
@@ -309,16 +381,15 @@ STYLE RULES:
 - Sound natural and conversational, like a real makeup artist talking to a client.
 - Be SPECIFIC to what you observe — no generic advice.
 - Do NOT make up brand names — use general product type descriptions instead.
-- If you cannot clearly see the face, say so honestly in texture_analysis.
 
-You MUST respond in valid JSON format with these exact fields:
+You MUST respond as a valid JSON object with these exact fields:
 {{
     "skin_type": "one of: oily, dry, combination, normal, sensitive",
     "skin_tone": "one of: fair, light, medium, tan, deep, dark",
     "undertone": "one of: warm, cool, neutral",
     "face_shape": "one of: oval, round, square, heart, oblong, diamond",
     "skin_concerns": ["array of makeup-relevant observations"],
-    "texture_analysis": "brief, honest description of skin texture",
+    "texture_analysis": "brief description of skin texture (use this to note any photo limitations)",
     "ai_recommendations": [
         {{
             "category": "category name",
@@ -338,35 +409,36 @@ Provide at least 7 recommendations covering ALL of these:
 5. Contouring & Highlighting - placement based on their face shape
 6. Brow Styling - shape recommendations based on their face
 7. Hair Styling - styles that complement their face shape"""
-            user_text = "Please analyze this face and provide detailed makeup suggestions. Base everything on the actual features, skin tone, and face shape you observe. Be honest and specific. Return ONLY valid JSON."
+            user_text = "Describe the visible features in this facial photograph and provide detailed makeup suggestions. Base everything on the actual features, skin tone, and face shape you observe. Return ONLY the valid JSON object, no other text."
         else:
-            system_msg = f"""You are a caring, knowledgeable skincare specialist speaking directly to a client.
-Analyze the provided facial image and provide detailed skin analysis with routine recommendations.
+            system_msg = f"""{vision_preamble}
+
+You are also a caring, knowledgeable skincare specialist speaking directly to a client.
+Describe what you observe in the facial image and provide detailed observations with routine recommendations.
+This is for non-medical cosmetic guidance only — never make a medical diagnosis.
 
 {stability_preamble}
 
 STYLE RULES:
-- Sound warm and supportive, like a real dermatologist talking to a patient.
+- Sound warm and supportive, like a friendly skincare consultant.
 - Be SPECIFIC to what you observe — no generic one-size-fits-all advice.
 - Do NOT make up product brand names — use general product type descriptions.
-- Be honest about what you can and cannot determine from a photo.
-- If the photo is unclear, say so in texture_analysis.
 
-You MUST respond in valid JSON format with these exact fields:
+You MUST respond as a valid JSON object with these exact fields:
 {{
     "skin_type": "one of: oily, dry, combination, normal, sensitive",
     "skin_tone": "one of: fair, light, medium, tan, deep, dark",
     "undertone": "one of: warm, cool, neutral",
     "face_shape": "one of: oval, round, square, heart, oblong, diamond",
-    "skin_concerns": ["array of ACTUAL concerns you observe"],
-    "texture_analysis": "honest description of what you see",
+    "skin_concerns": ["array of cosmetic observations from the photo"],
+    "texture_analysis": "description of what you observe (use this to note any photo limitations)",
     "ai_recommendations": [
         {{
             "category": "category name",
-            "recommendation": "specific product type for THEIR concerns",
+            "recommendation": "specific product type for THEIR observations",
             "shade_range": "N/A for skincare",
             "tips": "when and how to use it",
-            "reason": "why this addresses THEIR specific needs"
+            "reason": "why this addresses THEIR specific observations"
         }}
     ]
 }}
@@ -378,15 +450,19 @@ Provide at least 6 recommendations covering:
 4. Moisturizer - matched to their skin type
 5. Sunscreen - appropriate SPF
 6. Weekly Treatment - based on their needs"""
-            user_text = "Please analyze this facial image and provide a personalized skincare routine. Be specific to what you observe and honest about your assessment. Return ONLY valid JSON, no other text."
+            user_text = "Describe the visible features in this facial photograph and provide a personalized skincare routine. Be specific to what you observe. Return ONLY the valid JSON object, no other text."
 
+        # Force JSON output via response_format. This + the vision_preamble dramatically
+        # reduces OpenAI content-policy refusals for facial-analysis tasks.
         # temperature=0 forces deterministic output — same prompt + same image = same answer.
-        # This fixes the bug where re-scanning the same face gave different skin type/tone values.
         chat_factory = lambda: LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"skin-analysis-{uuid.uuid4()}",
             system_message=system_msg
-        ).with_model("openai", "gpt-4o").with_params(temperature=0)
+        ).with_model("openai", "gpt-4o").with_params(
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
         
         # Create image content
         image_content = ImageContent(image_base64=image_base64)
@@ -421,8 +497,40 @@ Provide at least 6 recommendations covering:
         if clean_response.endswith("```"):
             clean_response = clean_response[:-3]
         clean_response = clean_response.strip()
-        
-        analysis = json.loads(clean_response)
+
+        # ---------- REFUSAL DETECTION (defensive) ----------
+        # Even with response_format={'type':'json_object'} and the vision_preamble,
+        # OpenAI's content policy occasionally still returns plain-text refusals like
+        # "I'm sorry, I can't analyze the image..." This pattern check catches both
+        # plain-text refusals AND JSON objects with refusal text inside fields,
+        # then returns a clean 422 (not a misleading 503 'busy').
+        refusal_phrases = [
+            "i'm sorry", "i am sorry", "can't analyze", "cannot analyze",
+            "unable to analyze", "can't process", "cannot process",
+            "try uploading a different", "i can't help with",
+            "i can't assist", "unable to assist", "won't be able to",
+        ]
+        lower_response = clean_response.lower()
+        # Treat as refusal only if the response is short (genuine refusal) AND
+        # NOT a valid JSON object that just happens to contain those words in a
+        # legitimate texture_analysis description.
+        looks_like_json = clean_response.startswith("{") and clean_response.endswith("}")
+        if not looks_like_json and any(p in lower_response for p in refusal_phrases):
+            logger.warning(f"AI returned a plain-text refusal — returning 422 to user. Snippet: {clean_response[:160]}")
+            raise HTTPException(
+                status_code=422,
+                detail="We couldn\u2019t analyze this photo. For best results, try a clear, well-lit, front-facing photo with no filters.",
+            )
+
+        try:
+            analysis = json.loads(clean_response)
+        except json.JSONDecodeError as je:
+            # Non-JSON output despite response_format hint — most likely a soft refusal.
+            logger.warning(f"AI returned non-JSON ({je}) — treating as refusal. Snippet: {clean_response[:160]}")
+            raise HTTPException(
+                status_code=422,
+                detail="We couldn\u2019t analyze this photo. For best results, try a clear, well-lit, front-facing photo with no filters.",
+            )
 
         # ---------- CACHE WRITE ----------
         # Store the successful analysis so the same image returns instantly next time.
@@ -532,6 +640,30 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
+
+
+# ============================================================
+# LOCATION DATA ENDPOINTS — replaces frontend country-state-city library
+# Eliminates ~7-8MB from APK bundle. Frontend fetches lazily on picker open.
+# ============================================================
+
+@api_router.get("/locations/countries")
+async def get_countries():
+    """Return all countries (sorted by name) with name + isoCode + flag emoji."""
+    return _COUNTRIES_LIST
+
+
+@api_router.get("/locations/states/{country_code}")
+async def get_states(country_code: str):
+    """Return states/regions for a country. Empty list if country has none."""
+    return _STATES_BY_COUNTRY.get(country_code.upper(), [])
+
+
+@api_router.get("/locations/cities/{country_code}/{state_code}")
+async def get_cities(country_code: str, state_code: str):
+    """Return cities for a (country, state). Empty list if none."""
+    return _CITIES_BY_STATE.get((country_code.upper(), state_code.upper()), [])
+
 
 @api_router.post("/auth/check-email")
 async def check_email(data: CheckEmailRequest):

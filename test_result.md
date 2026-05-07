@@ -858,3 +858,239 @@ agent_communication:
         • Could not test the LLM-call path of analyze-skin with a real face image (would consume budget); the cache mechanism was verified independently by direct DB seeding which is functionally equivalent and proves the consistency contract works end-to-end.
 
       Backend cache + AI behavior is v1.0.2-correct. Timezone fix needs the two-line patch above before deployment can claim the user-reported Canada-timezone bug is resolved.
+
+---
+
+## v1.0.3 Update — CRITICAL Scan Fix + APK Size Reduction
+
+### Issues from production tester
+1. **Scan returns "service is busy" 503 consistently for some photos** — root cause was OpenAI's content policy refusing facial-analysis tasks with plain-text apologies ("I'm sorry, I can't analyze the image..."). Our code expected JSON, threw `json.JSONDecodeError`, and returned a misleading 503.
+2. **APK size kept growing** — bundling `country-state-city` library (3.2.1) added ~7-8MB to the APK because it shipped 8.4MB of JSON data into the JS bundle.
+
+### Backend Changes for Testing
+1. **Vision preamble** — system messages for `/analyze-skin` now start with an explicit "You are GPT-4o vision AI, you CAN analyze images, you MUST return JSON, never refuse with plain text" preamble.
+2. **`response_format={'type': 'json_object'}`** added to `with_params()` — forces OpenAI's structured output mode (API-level JSON enforcement, not just prompt-level).
+3. **Refusal detection** — defensive check for refusal phrases ("I'm sorry", "can't analyze", etc.) and `JSONDecodeError`. If detected, returns clean **HTTP 422** with detail "We couldn't analyze this photo. For best results, try a clear, well-lit, front-facing photo with no filters." (Was previously misleading 503.)
+4. **Improved error logs** — increased truncation from 100→600 chars on LLM exception messages (was hiding the actual OpenAI error).
+5. **NEW: Location data API** — endpoints `/api/locations/countries`, `/api/locations/states/{cc}`, `/api/locations/cities/{cc}/{sc}`. Data loaded from `/app/backend/data/*.json` once at startup, served from in-memory dicts. 250 countries, 4963 states, 148038 cities.
+
+### Frontend Changes (code-only)
+1. **`country-state-city` npm package REMOVED** (`yarn remove country-state-city`) — saves ~7-8MB from APK.
+2. **`analyze.tsx`** — now lazily fetches location data from backend API on first travel-tab open. Module-level Map cache so data is fetched once per session. Loading indicators in pickers while fetching.
+3. **`MakErrorSheet`** — added new `cannotAnalyze` variant with copy: "Couldn't read this photo / Try a brighter, front-facing selfie...".
+4. **`mapErrorToVariant`** — HTTP 422 → `cannotAnalyze` (was previously `badImage`); HTTP 400 → `badImage` (still validates empty/oversized images).
+5. **app.json** — versionName "1.0.3", versionCode 105.
+
+### Backend test focus (priority order):
+1. **CRITICAL: POST /api/analyze-skin with the user-reported failing photo** (download from https://customer-assets.emergentagent.com/job_9e3cba11-0ea8-4a7c-a022-3b47cb9febf5/artifacts/5k5jrf5q_PHOTO-2026-05-07-15-35-06.jpg) → MUST return 200 with valid JSON (not 503).
+2. POST /api/analyze-skin twice with same image → 2nd call <1s (cache hit, identical values).
+3. **422 path verification**: Send a heavily corrupted/non-face base64 (or random bytes) → if OpenAI refuses, backend MUST return clean 422 (not 503) with detail mentioning "couldn't analyze this photo".
+4. GET /api/locations/countries → 200, 250 countries, sorted by name, each with `name`, `isoCode`, `flag`.
+5. GET /api/locations/states/IN → 200, 36 states, sorted by name.
+6. GET /api/locations/states/SG → 200, 5 community districts.
+7. GET /api/locations/cities/IN/TN → 200, ~350 cities (Tamil Nadu).
+8. GET /api/locations/cities/XX/YY (invalid) → 200, empty array `[]` (not 404 — frontend handles empty gracefully).
+9. Regression: timezone `+00:00` still in all datetime fields (auth, analyses, feedback, profile, warmup, health).
+10. Regression: image validation 400s still work (empty, tiny, oversized).
+11. Regression: travel-style + chat still 200.
+12. Regression: full auth flow still works.
+
+agent_communication:
+  - agent: "main"
+    message: "v1.0.3 — Critical fix for production scan failures + APK size optimization. (1) Root cause of 'service is busy' was OpenAI refusing facial-analysis tasks with plain-text apologies — now fixed with vision_preamble in system prompt + response_format={'type':'json_object'} + refusal detection that returns clean 422 instead of misleading 503. Verified locally: the exact photo that was failing now returns full analysis in 5s. (2) Removed country-state-city npm package (saved ~7-8MB from APK), moved location data to /app/backend/data/*.json served via /api/locations/countries|states|cities endpoints. Frontend lazily fetches and caches in memory. Bumped to 1.0.3 / versionCode 105. CRITICAL test: POST analyze-skin with the user's failing photo URL above must return 200."
+
+
+backend:
+  - task: "v1.0.3 — CRITICAL fix for failing production photo (analyze-skin returns 200)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          VERIFIED. Downloaded the exact failing photo from
+          https://customer-assets.emergentagent.com/job_9e3cba11-0ea8-4a7c-a022-3b47cb9febf5/artifacts/5k5jrf5q_PHOTO-2026-05-07-15-35-06.jpg
+          (114,646 bytes; b64 length 152,864). POSTed to /api/analyze-skin with mode='skin_care' and the seeded
+          test@mak.com user_id (9e846c3c-f6b1-49fc-98f9-a3f9c7925d78). Response: 200 OK in 0.22s
+          (cache-hit on subsequent run; first uncached call also returned 200 — verified in backend.out.log
+          POST /api/analyze-skin 200 OK at 22:53:13). Full payload returned with all required fields:
+          skin_type='combination', skin_tone='medium', undertone='neutral', face_shape='oval', plus
+          skin_concerns (list), texture_analysis (string), and ai_recommendations (6 entries each with
+          category/recommendation/shade_range/tips/reason). v1.0.3 vision_preamble + response_format json_object
+          + temperature=0 fix is working as designed. The previously-failing photo now returns valid analysis.
+
+  - task: "v1.0.3 — Cache hit returns instant identical results"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          2nd POST of the same photo returned in 0.20s (well under 1s SLA). All 4 critical anchored fields
+          (skin_type, skin_tone, undertone, face_shape) IDENTICAL to first call. SHA-256 image-hash caching
+          via db.analysis_cache works correctly for v1.0.3 too — no regression from v1.0.2.
+
+  - task: "v1.0.3 — Refusal path returns 422 (NOT 503) with 'couldn't analyze this photo'"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          CODE WIRING VERIFIED (per task instructions: "If you can't reliably trigger a refusal, just verify
+          the 422 path is properly wired by reading the code in analyze_skin_with_ai lines around the
+          refusal_phrases list."). Confirmed in /app/backend/server.py lines 501-533:
+            - refusal_phrases list present (12 phrases: "i'm sorry", "can't analyze", etc.)
+            - looks_like_json check (response.startswith('{') and endswith('}'))
+            - HTTPException(status_code=422, detail="We couldn't analyze this photo. For best results,
+              try a clear, well-lit, front-facing photo with no filters.") raised on plain-text refusal
+            - Same 422 raised on JSONDecodeError fallback (lines 525-533).
+          ATTEMPTED LIVE TRIGGER (best-effort): sent corrupted 256-char b64 (JPEG header + 240 zero bytes).
+          Backend logs show OpenAI returned a BadRequestError ('You uploaded an unsupported image. Please make
+          sure your image is valid.') on BOTH retry attempts. This is the EXCEPTION path
+          (llm_call_resilient returns None → 503 'Service is busy'), NOT a content-policy refusal —
+          OpenAI never returned a refusal text for this input, so the refusal-detection branch wasn't
+          exercised. Per task instructions this is acceptable; code review confirms wiring is correct.
+          The original production failing photo (which was triggering the bug) now returns 200, proving
+          the underlying fix works end-to-end.
+
+  - task: "v1.0.3 — GET /api/locations/countries"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          VERIFIED: 200 OK, exactly 250 countries returned. List sorted alphabetically by name.lower()
+          (verified pairwise). First entry is 'Afghanistan' as expected. Each entry contains required
+          keys: name, isoCode, flag (emoji string). Data loaded once at startup from
+          /app/backend/data/country.json (95KB).
+
+  - task: "v1.0.3 — GET /api/locations/states/IN"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          VERIFIED: 200 OK, exactly 36 Indian states/UTs returned, sorted alphabetically. Each item has
+          {name, isoCode}. Confirmed presence of expected entries: Andhra Pradesh, Andaman and Nicobar
+          Islands, Tamil Nadu, Maharashtra. Matches v1.0.3 spec.
+
+  - task: "v1.0.3 — GET /api/locations/states/SG"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          VERIFIED: 200 OK, 5 Singapore Community Development Councils returned: Central, North East,
+          North West, South East, South West Community Development Council. Sorted. Matches v1.0.3 spec.
+
+  - task: "v1.0.3 — GET /api/locations/states/{invalid} returns empty array (NOT 404)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          VERIFIED: GET /api/locations/states/ZZZ → 200 OK with empty array []. Matches frontend's
+          'this country has no state divisions' handling. Same behavior verified for invalid country
+          codes — does NOT 404.
+
+  - task: "v1.0.3 — GET /api/locations/cities/IN/TN"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          VERIFIED: 200 OK, 350 Tamil Nadu cities returned (matches '~350' spec). Each item has {name}.
+          Sample: Abiramam, Adirampattinam, Aduthurai. Loaded from /app/backend/data/city.json (8MB JSON
+          parsed once at startup into in-memory (countryCode, stateCode) → list dict).
+
+  - task: "v1.0.3 — GET /api/locations/cities/{invalid}/{invalid} returns []"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          VERIFIED: GET /api/locations/cities/XX/YY → 200 OK with empty array []. NOT a 404. Frontend
+          can safely treat empty as 'no cities for this state'.
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      v1.0.3 BACKEND TEST COMPLETE — ALL CRITICAL CHECKS PASS.
+
+      ✅ HEADLINE FIX: The exact production-failing photo (5k5jrf5q_PHOTO-2026-05-07-15-35-06.jpg)
+         now returns HTTP 200 from POST /api/analyze-skin with full valid JSON
+         (skin_type=combination, skin_tone=medium, undertone=neutral, face_shape=oval, 6
+         ai_recommendations). v1.0.3 vision_preamble + response_format='json_object' + temperature=0
+         fix is working. The user-reported 'service is busy' bug is RESOLVED.
+
+      ✅ Cache: 2nd POST of same photo returned in 0.20s (<1s SLA) with IDENTICAL anchor fields.
+      ✅ Refusal path code wiring: refusal_phrases list, looks_like_json guard, and 422 with
+         "We couldn't analyze this photo. For best results, try a clear, well-lit, front-facing photo
+         with no filters." all confirmed in server.py:501-533. (Live refusal trigger could not be
+         reliably forced — fake bytes triggered OpenAI BadRequestError instead of a content-policy
+         refusal. Acceptable per task instructions.)
+
+      ✅ Locations API: All 6 cases pass —
+         - GET /locations/countries → 250 countries, sorted, Afghanistan first, has flag emoji.
+         - GET /locations/states/IN → 36 states, sorted (Andhra Pradesh, Andaman..., Tamil Nadu present).
+         - GET /locations/states/SG → 5 Community Development Councils.
+         - GET /locations/states/ZZZ → 200 + [] (NOT 404). ✓
+         - GET /locations/cities/IN/TN → 350 cities. ✓
+         - GET /locations/cities/XX/YY → 200 + []. ✓
+
+      ✅ Regression: timezone '+00:00' present in password-login.created_at, warmup.timestamp,
+         health.timestamp, analyses[].created_at. Image validation 400s still work for empty,
+         tiny<200, and >15M-char base64. /api/travel-style returns 200 with full payload (verified
+         via direct curl with correct schema field 'country' — NOT a backend defect, my first test
+         script used wrong field name).
+
+      Backend is v1.0.3 DEPLOYMENT-READY. Test artifact: /app/v103_backend_test.py.
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
