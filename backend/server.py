@@ -103,7 +103,7 @@ async def llm_call_resilient(chat_factory, user_message, first_timeout=18, retry
         response = await asyncio.wait_for(chat.send_message(user_message), timeout=first_timeout)
         return response, "ok"
     except (asyncio.TimeoutError, Exception) as e:
-        logger.warning(f"LLM first attempt failed ({type(e).__name__}: {str(e)[:100]}); retrying with longer timeout")
+        logger.warning(f"LLM first attempt failed ({type(e).__name__}: {str(e)[:600]}); retrying with longer timeout")
     
     # Attempt 2: longer timeout, fresh chat instance
     try:
@@ -112,7 +112,7 @@ async def llm_call_resilient(chat_factory, user_message, first_timeout=18, retry
         response = await asyncio.wait_for(chat.send_message(user_message), timeout=retry_timeout)
         return response, "retried"
     except Exception as e:
-        logger.error(f"LLM retry also failed ({type(e).__name__}: {str(e)[:100]})")
+        logger.error(f"LLM retry also failed ({type(e).__name__}: {str(e)[:600]})")
         return None, "failed"
 
 async def db_with_timeout(coro, timeout_seconds=10):
