@@ -23,7 +23,7 @@ const FAQS = [
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
-  const { colors } = useTheme();
+  const { colors, isDark, toggleTheme } = useTheme();
   const [showFeedback, setShowFeedback] = useState(false);
   const [showFAQ, setShowFAQ] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -73,6 +73,7 @@ export default function ProfileScreen() {
 
   const menuItems = [
     { icon: 'person-circle-outline', title: 'Account Settings', description: 'View & edit your profile', onPress: () => router.push('/edit-profile'), accent: colors.primary },
+    { icon: isDark ? 'sunny-outline' : 'moon-outline', title: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode', description: isDark ? 'Bright pastel theme' : 'Dim, easier on the eyes', onPress: toggleTheme, accent: colors.accent },
     { icon: 'help-circle-outline', title: 'FAQ', description: 'Frequently asked questions', onPress: () => setShowFAQ(!showFAQ), accent: colors.tertiary },
     { icon: 'share-social-outline', title: 'Share App', description: 'Invite friends to try MAK', onPress: handleShareApp, accent: colors.secondary },
     { icon: 'chatbubble-outline', title: 'Give Feedback', description: 'Help us improve', onPress: () => setShowFeedback(true), accent: colors.accent },

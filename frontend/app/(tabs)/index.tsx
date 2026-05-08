@@ -14,6 +14,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -23,9 +24,9 @@ import { useTheme } from '../../src/context/ThemeContext';
 import { api } from '../../src/services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-// v1.0.8 — Reverted to the original simple static MAK wordmark with sparkle
-// icons on each side, matching the look from v1.0.5 and earlier. No animation,
-// no asset weight \u2014 just clean, on-brand pastel pink text.
+// v1.0.8 — User-supplied MAK wordmark with sparkles, processed to remove dark
+// background so it works on BOTH light & dark themes. Tiny WebP (~4 KB).
+const MAK_WORDMARK = require('../../assets/images/mak-wordmark.webp');
 
 const BEAUTY_TIPS = [
   { icon: 'sunny-outline', title: 'Sun Protection', text: 'Always apply SPF 30+ sunscreen as the last step of your morning routine, even on cloudy days.', color: '#E8A87C' },
@@ -226,14 +227,10 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Original static MAK brand wordmark (v1.0.5 and earlier).
-            Sparkle icons flank the "MAK" text on each side. No animation. */}
+        {/* User-supplied MAK wordmark image with sparkles. Background was stripped
+            during processing so it blends with both light & dark themes. */}
         <View style={styles.brandCenter}>
-          <View style={styles.brandLogoRow}>
-            <Ionicons name="sparkles" size={20} color={colors.primary} />
-            <Text style={[styles.brandName, { color: colors.primary }]}>MAK</Text>
-            <Ionicons name="sparkles" size={20} color={colors.primary} />
-          </View>
+          <Image source={MAK_WORDMARK} style={styles.brandWordmark} resizeMode="contain" />
           <Text style={[styles.brandTagline, { color: colors.textSecondary }]} numberOfLines={1}>Your Personalized Makeup Buddy</Text>
         </View>
 
@@ -523,10 +520,9 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 14, letterSpacing: 0.3 },
   waveEmoji: { fontSize: 20 },
   userName: { fontSize: 24, fontWeight: '700', marginTop: 2 },
-  // Brand wordmark — static MAK text with sparkle icons on each side
+  // Brand wordmark — user-supplied image with sparkles + MAK letters
   brandCenter: { alignItems: 'center', marginBottom: 22, marginTop: 4 },
-  brandLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brandName: { fontSize: 28, fontWeight: '800', letterSpacing: 4 },
+  brandWordmark: { width: 220, height: 60 },
   brandTagline: { fontSize: 13, marginTop: 8, fontWeight: '500', letterSpacing: 0.3 },
   // Main CTA
   mainCard: { flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: 18, borderWidth: 1, marginBottom: 20 },
