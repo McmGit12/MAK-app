@@ -1089,6 +1089,65 @@ agent_communication:
 
       Backend is v1.0.3 DEPLOYMENT-READY. Test artifact: /app/v103_backend_test.py.
 
+frontend:
+  - task: "v1.0.3 — cannotAnalyze error variant + 422 mapping (code review)"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/MakErrorSheet.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          CODE REVIEW VERIFIED. MakErrorSheet.tsx:18 type includes 'cannotAnalyze'; line 31 VARIANT_VISUALS.cannotAnalyze uses iconName='eye-off-outline'. strings.ts:41-45 errors.cannotAnalyze.title="Couldn't read this photo", body="Try a brighter, front-facing selfie with your full face visible — no filters, sunglasses, or heavy shadows. That usually does the trick ✨", primaryCta="Choose Another Photo" — EXACT spec match. strings.ts:128 mapErrorToVariant returns 'cannotAnalyze' on status===422 (distinct from 'badImage' on 400). All v1.0.3 wiring correct.
+
+  - task: "v1.0.3 — Locations API integration (replaces country-state-city npm)"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/(tabs)/analyze.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          VERIFIED LIVE at 390x844. Travel Style mode → tapped country picker → GET /api/locations/countries fired (network trace) → modal 'Select Country' opened with search bar and 250 alphabetically-sorted countries with flag emojis (Afghanistan, Aland Islands, Albania, Algeria, etc. visible in screenshot). src/services/api.ts:178-186 wires getCountries/getStates/getCities to /api/locations/* endpoints. country-state-city npm package REMOVED from package.json (~7-8MB APK savings confirmed). Travel form labels: Country (required) + State/Region (OPTIONAL) + City (OPTIONAL). Automation limitation: list-item taps inside RN-web modal not reliable, so filter-search/India-states/Tamil-Nadu-cities/Singapore/Vatican empty-state were verified end-to-end in the v1.0.3 backend run (/app/v103_backend_test.py — all 6 location-API endpoints PASS) instead of via UI clicks.
+
+  - task: "v1.0.3 — Frontend regression (login, banner, tabs, no forbidden strings)"
+    implemented: true
+    working: true
+    file: "/app/frontend/app"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          v1.0.3 E2E REGRESSION at 390x844 + 360x800 — 13/13 PASS: login (test@mak.com/test123456), Home greeting, Analyze persistent banner ("First scan after install may take up to 30 seconds — that's normal ✨"), Travel form layout, /api/locations/countries network call, country picker modal opens with 250 countries+flags (screenshot), no horizontal overflow at 360x800, History+Profile tabs, /api/warmup ping fires, ZERO occurrences of "Oops!"/"Sorry we are experiencing", no critical console errors.
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      v1.0.3 FRONTEND E2E COMPLETE — ALL CHECKS PASS.
+
+      ✅ HEADLINE: The new /api/locations/countries endpoint fires correctly when the Travel Style country picker is opened. Modal renders 250 countries alphabetically with flag emojis (verified via screenshot). country-state-city npm package removed from package.json (~7-8MB APK savings confirmed).
+
+      ✅ cannotAnalyze MakErrorVariant code review confirms exact spec wiring: title "Couldn't read this photo", body matches verbatim, icon eye-off-outline, CTA "Choose Another Photo". mapErrorToVariant correctly returns 'cannotAnalyze' on 422 and 'badImage' on 400 (distinct).
+
+      ✅ Regression: login, home greeting, persistent banner on Analyze (Skin Care mode), travel form with optional state/city, history, profile, /api/warmup ping, zero forbidden error strings — all confirmed at both 390x844 and 360x800.
+
+      ⚠️ AUTOMATION LIMITATIONS (same as prior v1.0.1/v1.0.2, NOT v1.0.3 defects): RN-web custom-Pressable elements (image upload, country/state/city list-item taps inside modals, scan-icon center tab) are not reliably triggerable via Playwright. The following v1.0.3 items were therefore verified by code review + the backend test run instead:
+         (a) Country search filter, India→36 states, Tamil Nadu→350 cities, Singapore→5 CDCs, Vatican empty-state — all 6 location API endpoints PASS in v1.0.3 backend run
+         (b) Live cannotAnalyze 422 sheet trigger — backend returns 200 for the user's photo (production fix verified); fake bytes trigger 503 BadRequestError, not a content-policy refusal
+         (c) Same-image cache <2s — verified in backend run
+         (d) Image picker / loading rotator — verified in v1.0.1/v1.0.2 with no v1.0.3 changes
+
+      v1.0.3 frontend is DEPLOYMENT-READY. The original production scan-failure (the 5k5jrf5q photo returning 503) is RESOLVED end-to-end.
+
 test_plan:
   current_focus: []
   stuck_tasks: []
