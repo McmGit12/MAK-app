@@ -316,13 +316,43 @@ async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Di
     identical analysis INSTANTLY (no LLM call) — this fixes the bug where
     re-scanning the same face gave different skin type/tone/shape values.
     """
-    # Image size validation \u2014 returns 400 if invalid (frontend maps to 'badImage' variant)
-    if not image_base64 or len(image_base64) < 200:
+    # ---------- BASE64 SANITIZATION ----------
+    # Web/desktop expo-image-picker can return base64 with embedded newlines,
+    # whitespace, or a 'data:image/...;base64,' prefix — all of which OpenAI
+    # rejects with "Invalid base64 image_url". This block normalizes ALL three
+    # cases so we send a clean payload regardless of the device source.
+    if not image_base64:
         raise HTTPException(
             status_code=400,
             detail="Image couldn't be processed. Please use a clear photo."
         )
-    if len(image_base64) > 15_000_000:  # ~10MB binary
+    # Strip any "data:image/<type>;base64," prefix that the frontend may have included
+    if image_base64.startswith("data:") and ";base64," in image_base64:
+        image_base64 = image_base64.split(";base64,", 1)[1]
+    # Strip ALL whitespace and CR/LF (browsers sometimes wrap base64 to 76 chars)
+    image_base64 = "".join(image_base64.split())
+    # Pad to a multiple of 4 if the upload truncated trailing '='
+    pad_needed = (-len(image_base64)) % 4
+    if pad_needed:
+        image_base64 = image_base64 + ("=" * pad_needed)
+    # Validate it's actually decodable base64 — fail fast with a 400 if not
+    import base64 as _b64
+    try:
+        _decoded_bytes = _b64.b64decode(image_base64, validate=True)
+        _decoded_size = len(_decoded_bytes)
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Image couldn't be processed. Please use a clear photo."
+        )
+
+    # Image size validation (in BYTES, not base64 chars)
+    if _decoded_size < 1024:  # < 1KB → not a real image
+        raise HTTPException(
+            status_code=400,
+            detail="Image couldn't be processed. Please use a clear photo."
+        )
+    if _decoded_size > 12 * 1024 * 1024:  # 12 MB binary cap (OpenAI vision limit is 20MB)
         raise HTTPException(
             status_code=400,
             detail="Image is too large. Please use a smaller photo."

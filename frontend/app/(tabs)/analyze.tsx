@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput, FlatList, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput, FlatList, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -314,10 +314,13 @@ export default function AnalyzeScreen() {
           ))}
         </View>
 
-        {/* Persistent first-scan hint banner — applies to all modes */}
-        <View style={s.infoBannerWrap}>
-          <MakInfoBanner />
-        </View>
+        {/* Persistent first-scan hint banner — only for scan modes (skin_care, makeup).
+            Travel mode doesn't take a photo so the "first scan" message would be misleading. */}
+        {(mode === 'skin_care' || mode === 'makeup') && (
+          <View style={s.infoBannerWrap}>
+            <MakInfoBanner />
+          </View>
+        )}
 
         {/* SKIN CARE / MAKEUP MODES */}
         {(mode === 'skin_care' || mode === 'makeup') && (
@@ -496,9 +499,9 @@ export default function AnalyzeScreen() {
       </ScrollView>
 
       {/* Country Picker Modal */}
-      <Modal visible={showCountryPicker} animationType="slide" transparent>
-        <View style={[s.modalOverlay, { backgroundColor: colors.overlay }]}>
-          <View style={[s.modalContent, { backgroundColor: colors.background }]}>
+      <Modal visible={showCountryPicker} animationType="slide" transparent onRequestClose={() => { setShowCountryPicker(false); setCountrySearch(''); }}>
+        <Pressable style={[s.modalOverlay, { backgroundColor: colors.overlay }]} onPress={() => { setShowCountryPicker(false); setCountrySearch(''); }}>
+          <Pressable style={[s.modalContent, { backgroundColor: colors.background }]} onPress={() => {}}>
             <View style={s.modalHeader}>
               <Text style={[s.modalTitle, { color: colors.text }]}>Select Country</Text>
               <TouchableOpacity onPress={() => { setShowCountryPicker(false); setCountrySearch(''); }}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
@@ -542,14 +545,14 @@ export default function AnalyzeScreen() {
                 )}
               />
             )}
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* Month Picker Modal */}
-      <Modal visible={showMonthPicker} animationType="slide" transparent>
-        <View style={[s.modalOverlay, { backgroundColor: colors.overlay }]}>
-          <View style={[s.modalContent, { backgroundColor: colors.background, maxHeight: 400 }]}>
+      <Modal visible={showMonthPicker} animationType="slide" transparent onRequestClose={() => setShowMonthPicker(false)}>
+        <Pressable style={[s.modalOverlay, { backgroundColor: colors.overlay }]} onPress={() => setShowMonthPicker(false)}>
+          <Pressable style={[s.modalContent, { backgroundColor: colors.background, maxHeight: 400 }]} onPress={() => {}}>
             <View style={s.modalHeader}>
               <Text style={[s.modalTitle, { color: colors.text }]}>Select Month</Text>
               <TouchableOpacity onPress={() => setShowMonthPicker(false)}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
@@ -560,14 +563,14 @@ export default function AnalyzeScreen() {
                 {selectedMonth === item && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
               </TouchableOpacity>
             )} />
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* State Picker Modal */}
-      <Modal visible={showStatePicker} animationType="slide" transparent>
-        <View style={[s.modalOverlay, { backgroundColor: colors.overlay }]}>
-          <View style={[s.modalContent, { backgroundColor: colors.background, maxHeight: 420 }]}>
+      <Modal visible={showStatePicker} animationType="slide" transparent onRequestClose={() => { setShowStatePicker(false); setStateSearch(''); }}>
+        <Pressable style={[s.modalOverlay, { backgroundColor: colors.overlay }]} onPress={() => { setShowStatePicker(false); setStateSearch(''); }}>
+          <Pressable style={[s.modalContent, { backgroundColor: colors.background, maxHeight: 420 }]} onPress={() => {}}>
             <View style={s.modalHeader}>
               <Text style={[s.modalTitle, { color: colors.text }]}>Select State / Region</Text>
               <TouchableOpacity onPress={() => { setShowStatePicker(false); setStateSearch(''); }}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
@@ -613,14 +616,14 @@ export default function AnalyzeScreen() {
                 )}
               />
             )}
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* City Picker Modal */}
-      <Modal visible={showCityPicker} animationType="slide" transparent>
-        <View style={[s.modalOverlay, { backgroundColor: colors.overlay }]}>
-          <View style={[s.modalContent, { backgroundColor: colors.background, maxHeight: 420 }]}>
+      <Modal visible={showCityPicker} animationType="slide" transparent onRequestClose={() => { setShowCityPicker(false); setCitySearch(''); }}>
+        <Pressable style={[s.modalOverlay, { backgroundColor: colors.overlay }]} onPress={() => { setShowCityPicker(false); setCitySearch(''); }}>
+          <Pressable style={[s.modalContent, { backgroundColor: colors.background, maxHeight: 420 }]} onPress={() => {}}>
             <View style={s.modalHeader}>
               <Text style={[s.modalTitle, { color: colors.text }]}>Select City</Text>
               <TouchableOpacity onPress={() => { setShowCityPicker(false); setCitySearch(''); }}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
@@ -662,8 +665,8 @@ export default function AnalyzeScreen() {
                 )}
               />
             )}
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
       {/* Full-screen loading overlay — shown during analyze/travel */}
       <Modal visible={isLoading} transparent animationType="fade" statusBarTranslucent>
