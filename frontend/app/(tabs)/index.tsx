@@ -14,7 +14,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Easing,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -24,16 +24,11 @@ import { useTheme } from '../../src/context/ThemeContext';
 import { api } from '../../src/services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Animated MAK logo: cycles through makeup-themed icons next to the brand text.
-// Lightweight (zero deps), uses native Animated for smooth fade-cross transitions.
-const LOGO_ICONS: Array<{ name: keyof typeof Ionicons.glyphMap; color: string }> = [
-  { name: 'sparkles', color: '#E8A0BF' },
-  { name: 'color-palette', color: '#C4B0DB' },
-  { name: 'brush', color: '#E85D75' },
-  { name: 'flower', color: '#9DD6C8' },
-  { name: 'heart', color: '#D4A574' },
-];
+// Reuse the existing app launcher icon as the home-screen logo. Already bundled
+// for android/ios launcher \u2014 zero additional APK size cost. Wrapping it in a
+// circular dark-theme container so the cream/watercolor background of the
+// logo doesn't float awkwardly against the dark theme.
+const MAK_LOGO = require('../../assets/images/icon.png');
 
 const BEAUTY_TIPS = [
   { icon: 'sunny-outline', title: 'Sun Protection', text: 'Always apply SPF 30+ sunscreen as the last step of your morning routine, even on cloudy days.', color: '#E8A87C' },
@@ -79,10 +74,8 @@ export default function HomeScreen() {
 
   const waveAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const logoIconIndex = useRef(0);
-  const [activeLogoIcon, setActiveLogoIcon] = useState(0);
-  const logoFade = useRef(new Animated.Value(1)).current;
-  const logoScale = useRef(new Animated.Value(1)).current;
+  // Subtle breathing glow around the logo \u2014 native Animated, zero perf cost.
+  const logoGlow = useRef(new Animated.Value(0.3)).current;
 
   const todayQuote = BEAUTY_QUOTES[new Date().getDay() % BEAUTY_QUOTES.length];
 
@@ -160,28 +153,16 @@ export default function HomeScreen() {
     return () => pulse.stop();
   }, []);
 
-  // Animated MAK logo: rotates through makeup icons every 1.8s with a fade+scale
-  // transition. Native-driver only — no jank, no extra deps.
+  // Logo glow: soft pulsing halo behind the brand image (subtle, on-brand)
   useEffect(() => {
-    const cycle = () => {
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(logoFade, { toValue: 0, duration: 280, useNativeDriver: true, easing: Easing.in(Easing.ease) }),
-          Animated.timing(logoFade, { toValue: 1, duration: 280, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
-        ]),
-        Animated.sequence([
-          Animated.timing(logoScale, { toValue: 0.6, duration: 280, useNativeDriver: true, easing: Easing.in(Easing.ease) }),
-          Animated.timing(logoScale, { toValue: 1, duration: 280, useNativeDriver: true, easing: Easing.out(Easing.back(1.6)) }),
-        ]),
-      ]).start();
-      // Swap icon at the midpoint of the fade
-      setTimeout(() => {
-        logoIconIndex.current = (logoIconIndex.current + 1) % LOGO_ICONS.length;
-        setActiveLogoIcon(logoIconIndex.current);
-      }, 280);
-    };
-    const interval = setInterval(cycle, 2000);
-    return () => clearInterval(interval);
+    const glow = Animated.loop(
+      Animated.sequence([
+        Animated.timing(logoGlow, { toValue: 0.7, duration: 2200, useNativeDriver: true }),
+        Animated.timing(logoGlow, { toValue: 0.3, duration: 2200, useNativeDriver: true }),
+      ])
+    );
+    glow.start();
+    return () => glow.stop();
   }, []);
 
   const waveRotate = waveAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '20deg'] });
@@ -242,8 +223,6 @@ export default function HomeScreen() {
     );
   }
 
-  const currentLogo = LOGO_ICONS[activeLogoIcon];
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
@@ -264,18 +243,17 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Animated MAK branding — makeup-icon carousel cycles next to the wordmark */}
+        {/* Brand logo \u2014 v1.0.7 uses the official MAK app icon image, framed in a
+            circular container with a soft pink glow so the watercolor logo
+            integrates cleanly with the dark theme. */}
         <View style={styles.brandCenter}>
-          <View style={styles.brandLogoRow}>
-            <Animated.View style={[styles.logoIconWrap, { backgroundColor: currentLogo.color + '20', opacity: logoFade, transform: [{ scale: logoScale }] }]}>
-              <Ionicons name={currentLogo.name} size={20} color={currentLogo.color} />
-            </Animated.View>
-            <Text style={[styles.brandName, { color: colors.primary }]}>MAK</Text>
-            <Animated.View style={[styles.logoIconWrap, { backgroundColor: currentLogo.color + '20', opacity: logoFade, transform: [{ scale: logoScale }] }]}>
-              <Ionicons name={currentLogo.name} size={20} color={currentLogo.color} />
-            </Animated.View>
+          <View style={styles.logoFrameWrap}>
+            <Animated.View style={[styles.logoGlow, { backgroundColor: colors.primary, opacity: logoGlow }]} />
+            <View style={[styles.logoFrame, { backgroundColor: colors.surface, borderColor: colors.primary }]}>
+              <Image source={MAK_LOGO} style={styles.logoImage} resizeMode="cover" />
+            </View>
           </View>
-          <Text style={[styles.brandTagline, { color: colors.textSecondary }]}>Your Personalized Makeup Buddy</Text>
+          <Text style={[styles.brandTagline, { color: colors.textSecondary }]} numberOfLines={1}>Your Personalized Makeup Buddy</Text>
         </View>
 
         {/* Single primary CTA — leads to Analyze screen which has the 3 sub-modes */}
@@ -564,12 +542,13 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 14, letterSpacing: 0.3 },
   waveEmoji: { fontSize: 20 },
   userName: { fontSize: 24, fontWeight: '700', marginTop: 2 },
-  // Brand (animated logo carousel)
-  brandCenter: { alignItems: 'center', marginBottom: 20 },
-  brandLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  logoIconWrap: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  brandName: { fontSize: 28, fontWeight: '800', letterSpacing: 4 },
-  brandTagline: { fontSize: 12, marginTop: 6 },
+  // Brand (logo image with soft pink halo glow on dark theme)
+  brandCenter: { alignItems: 'center', marginBottom: 22 },
+  logoFrameWrap: { width: 110, height: 110, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  logoGlow: { position: 'absolute', width: 130, height: 130, borderRadius: 65 },
+  logoFrame: { width: 100, height: 100, borderRadius: 50, borderWidth: 2, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  logoImage: { width: 96, height: 96, borderRadius: 48 },
+  brandTagline: { fontSize: 13, marginTop: 4, fontWeight: '500', letterSpacing: 0.3 },
   // Main CTA
   mainCard: { flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: 18, borderWidth: 1, marginBottom: 20 },
   mainCardIcon: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 14 },

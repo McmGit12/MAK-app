@@ -303,21 +303,21 @@ export default function AnalyzeScreen() {
         <View style={[s.tabContainer, { backgroundColor: colors.surfaceVariant }]}>
           {([
             { key: 'skin_care' as Mode, icon: 'leaf', label: 'Skin Care', sub: 'Daily routine' },
-            { key: 'makeup' as Mode, icon: 'color-palette', label: 'Makeup', sub: 'Blush, lip, eye' },
-            { key: 'travel' as Mode, icon: 'airplane', label: 'Travel Style', sub: 'Destination look' },
+            { key: 'makeup' as Mode, icon: 'color-palette', label: 'Makeup', sub: 'Looks & tips' },
+            { key: 'travel' as Mode, icon: 'airplane', label: 'Travel', sub: 'Destination' },
           ]).map((t, idx) => (
             <React.Fragment key={t.key}>
-              {idx > 0 && <View style={[s.tabDivider, { backgroundColor: colors.border }]} />}
+              {idx > 0 && <View style={[s.tabDivider, { backgroundColor: colors.primary, opacity: 0.35 }]} />}
               <TouchableOpacity
                 style={[s.modeTab, mode === t.key && { backgroundColor: colors.surface, borderColor: colors.primary + '60' }]}
                 onPress={() => { setMode(t.key); setTravelResult(null); }}
                 activeOpacity={0.7}
               >
                 <View style={[s.modeTabIconBg, { backgroundColor: mode === t.key ? colors.primaryLight : 'transparent' }]}>
-                  <Ionicons name={t.icon as any} size={mode === t.key ? 26 : 22} color={mode === t.key ? colors.primary : colors.textTertiary} />
+                  <Ionicons name={t.icon as any} size={mode === t.key ? 24 : 20} color={mode === t.key ? colors.primary : colors.textTertiary} />
                 </View>
-                <Text style={[s.modeTabLabel, { color: mode === t.key ? colors.text : colors.textSecondary }]}>{t.label}</Text>
-                <Text style={[s.modeTabSub, { color: mode === t.key ? colors.textSecondary : colors.textTertiary }]}>{t.sub}</Text>
+                <Text style={[s.modeTabLabel, { color: mode === t.key ? colors.text : colors.textSecondary }]} numberOfLines={1}>{t.label}</Text>
+                <Text style={[s.modeTabSub, { color: mode === t.key ? colors.textSecondary : colors.textTertiary }]} numberOfLines={1}>{t.sub}</Text>
               </TouchableOpacity>
             </React.Fragment>
           ))}
@@ -748,14 +748,15 @@ const s = StyleSheet.create({
   pageSub: { fontSize: 14, marginBottom: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  // Tabs — v1.0.6 redesign: each mode is now visually larger and bolder
-  // with a distinct active-state border and icon background.
-  tabContainer: { flexDirection: 'row', borderRadius: 18, padding: 6, marginBottom: 18, overflow: 'hidden', gap: 4 },
-  tabDivider: { width: 0, marginVertical: 0 },
-  modeTab: { flex: 1, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 6, borderRadius: 14, borderWidth: 1.5, borderColor: 'transparent' },
-  modeTabIconBg: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  modeTabLabel: { fontSize: 14, fontWeight: '800', textAlign: 'center', letterSpacing: 0.3 },
-  modeTabSub: { fontSize: 10, marginTop: 3, textAlign: 'center', fontWeight: '500' },
+  // Tabs — v1.0.7: clear vertical divider line + generous padding between
+  // the 3 mode sub-sections (Skin Care / Makeup / Travel Style) per user
+  // feedback that they were not visually distinct enough.
+  tabContainer: { flexDirection: 'row', borderRadius: 18, padding: 6, marginBottom: 18, alignItems: 'stretch' },
+  tabDivider: { width: 1, marginVertical: 10, opacity: 0.6 },
+  modeTab: { flex: 1, alignItems: 'center', paddingVertical: 14, paddingHorizontal: 4, borderRadius: 14, borderWidth: 1.5, borderColor: 'transparent', marginHorizontal: 2 },
+  modeTabIconBg: { width: 40, height: 40, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  modeTabLabel: { fontSize: 13, fontWeight: '800', textAlign: 'center', letterSpacing: 0.2, includeFontPadding: false },
+  modeTabSub: { fontSize: 9.5, marginTop: 2, textAlign: 'center', fontWeight: '500' },
   // Upload area — v1.0.6: single-tap CTA opens bottom sheet
   uploadCtaPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, marginTop: 14 },
   uploadCtaPillText: { fontSize: 13, fontWeight: '600' },
