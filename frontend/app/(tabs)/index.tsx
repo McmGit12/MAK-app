@@ -14,7 +14,6 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -24,10 +23,18 @@ import { useTheme } from '../../src/context/ThemeContext';
 import { api } from '../../src/services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-// New v1.0.7 brand logo — watercolor MaK wordmark with transparent background
-// (cream-pixel matte applied so it blends into the dark theme without a circle).
-// WebP keeps file size at ~110KB (vs 530KB+ for full-res PNG).
-const MAK_LOGO = require('../../assets/images/mak-brand.webp');
+// v1.0.8 — Animated icon carousel (zero asset weight) until the user supplies a
+// brand logo designed for the dark theme palette. Cycles through 5 makeup icons
+// using ONLY our brand colors: pink #E8A0BF, lavender #C4B0DB, mint #9DD6C8,
+// warm beige #D4A574, coral #FF7B8F. The watercolor PNG has been removed from
+// the bundle to keep app size lean.
+const LOGO_ICONS: Array<{ name: keyof typeof Ionicons.glyphMap; color: string }> = [
+  { name: 'sparkles', color: '#E8A0BF' },        // pastel pink
+  { name: 'color-palette', color: '#C4B0DB' },   // pastel lavender
+  { name: 'brush', color: '#FF7B8F' },           // coral
+  { name: 'flower', color: '#9DD6C8' },          // pastel mint
+  { name: 'heart', color: '#D4A574' },           // warm beige
+];
 
 const BEAUTY_TIPS = [
   { icon: 'sunny-outline', title: 'Sun Protection', text: 'Always apply SPF 30+ sunscreen as the last step of your morning routine, even on cloudy days.', color: '#E8A87C' },
@@ -73,11 +80,11 @@ export default function HomeScreen() {
 
   const waveAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  // v1.0.7: subtle breathing animations for the watercolor MaK logo.
-  // logoBreath: gentle scale 1.00 \u2194 1.04 (loops every ~5s)
-  // logoSway:   tiny rotation -1\u00b0 \u2194 +1\u00b0 (loops every ~7s, out of phase with breath)
-  const logoBreath = useRef(new Animated.Value(0)).current;
-  const logoSway = useRef(new Animated.Value(0)).current;
+  // Animated icon carousel for the brand wordmark (until user uploads a real logo).
+  const logoIconIndex = useRef(0);
+  const [activeLogoIcon, setActiveLogoIcon] = useState(0);
+  const logoFade = useRef(new Animated.Value(1)).current;
+  const logoScale = useRef(new Animated.Value(1)).current;
 
   const todayQuote = BEAUTY_QUOTES[new Date().getDay() % BEAUTY_QUOTES.length];
 
@@ -155,31 +162,31 @@ export default function HomeScreen() {
     return () => pulse.stop();
   }, []);
 
-  // Logo breathing: gentle scale pulse (1.0 -> 1.04) — calm, on-brand
+  // Animated icon carousel: cycles through 5 makeup-themed icons every 2s with
+  // a fade+scale transition. Uses only our brand color palette so it blends
+  // perfectly with the dark theme.
   useEffect(() => {
-    const breath = Animated.loop(
-      Animated.sequence([
-        Animated.timing(logoBreath, { toValue: 1, duration: 2600, useNativeDriver: true }),
-        Animated.timing(logoBreath, { toValue: 0, duration: 2600, useNativeDriver: true }),
-      ])
-    );
-    breath.start();
-    // Tiny sway: -1deg <-> +1deg
-    const sway = Animated.loop(
-      Animated.sequence([
-        Animated.timing(logoSway, { toValue: 1, duration: 3500, useNativeDriver: true }),
-        Animated.timing(logoSway, { toValue: -1, duration: 3500, useNativeDriver: true }),
-        Animated.timing(logoSway, { toValue: 0, duration: 3500, useNativeDriver: true }),
-      ])
-    );
-    sway.start();
-    return () => { breath.stop(); sway.stop(); };
+    const cycle = () => {
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(logoFade, { toValue: 0, duration: 280, useNativeDriver: true }),
+          Animated.timing(logoFade, { toValue: 1, duration: 280, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(logoScale, { toValue: 0.6, duration: 280, useNativeDriver: true }),
+          Animated.timing(logoScale, { toValue: 1, duration: 280, useNativeDriver: true }),
+        ]),
+      ]).start();
+      setTimeout(() => {
+        logoIconIndex.current = (logoIconIndex.current + 1) % LOGO_ICONS.length;
+        setActiveLogoIcon(logoIconIndex.current);
+      }, 280);
+    };
+    const interval = setInterval(cycle, 2000);
+    return () => clearInterval(interval);
   }, []);
 
   const waveRotate = waveAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '20deg'] });
-  // Logo animation interpolations
-  const logoBreathScale = logoBreath.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] });
-  const logoSwayDeg = logoSway.interpolate({ inputRange: [-1, 1], outputRange: ['-1deg', '1deg'] });
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -237,6 +244,8 @@ export default function HomeScreen() {
     );
   }
 
+  const currentLogo = LOGO_ICONS[activeLogoIcon];
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
@@ -257,18 +266,20 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Brand logo — v1.0.7: watercolor MaK wordmark with transparent edges,
-            blended directly onto the dark home screen (no circular frame).
-            Subtle dual-animation: gentle scale-breath + tiny side-to-side sway. */}
+        {/* Brand wordmark with animated icon carousel — uses ONLY our brand
+            palette colors so it blends perfectly with the dark theme.
+            Will be replaced by the user's custom logo once delivered. */}
         <View style={styles.brandCenter}>
-          <Animated.Image
-            source={MAK_LOGO}
-            style={[
-              styles.brandLogo,
-              { transform: [{ scale: logoBreathScale }, { rotate: logoSwayDeg }] },
-            ]}
-            resizeMode="contain"
-          />
+          <View style={styles.brandLogoRow}>
+            <Animated.View style={[styles.logoIconWrap, { backgroundColor: currentLogo.color + '22', opacity: logoFade, transform: [{ scale: logoScale }] }]}>
+              <Ionicons name={currentLogo.name} size={22} color={currentLogo.color} />
+            </Animated.View>
+            <Text style={[styles.brandName, { color: colors.primary }]}>MAK</Text>
+            <Animated.View style={[styles.logoIconWrap, { backgroundColor: currentLogo.color + '22', opacity: logoFade, transform: [{ scale: logoScale }] }]}>
+              <Ionicons name={currentLogo.name} size={22} color={currentLogo.color} />
+            </Animated.View>
+          </View>
+          <Text style={[styles.brandTagline, { color: colors.textSecondary }]} numberOfLines={1}>Your Personalized Makeup Buddy</Text>
         </View>
 
         {/* Single primary CTA — leads to Analyze screen which has the 3 sub-modes */}
@@ -557,9 +568,12 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 14, letterSpacing: 0.3 },
   waveEmoji: { fontSize: 20 },
   userName: { fontSize: 24, fontWeight: '700', marginTop: 2 },
-  // Brand (watercolor logo blended directly into dark theme, no frame)
-  brandCenter: { alignItems: 'center', marginBottom: 18, marginTop: 4 },
-  brandLogo: { width: 220, height: 175 },
+  // Brand wordmark + animated icon carousel
+  brandCenter: { alignItems: 'center', marginBottom: 22, marginTop: 4 },
+  brandLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  logoIconWrap: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  brandName: { fontSize: 30, fontWeight: '800', letterSpacing: 4 },
+  brandTagline: { fontSize: 13, marginTop: 8, fontWeight: '500', letterSpacing: 0.3 },
   // Main CTA
   mainCard: { flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: 18, borderWidth: 1, marginBottom: 20 },
   mainCardIcon: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
