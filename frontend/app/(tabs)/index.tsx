@@ -24,11 +24,10 @@ import { useTheme } from '../../src/context/ThemeContext';
 import { api } from '../../src/services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-// Reuse the existing app launcher icon as the home-screen logo. Already bundled
-// for android/ios launcher \u2014 zero additional APK size cost. Wrapping it in a
-// circular dark-theme container so the cream/watercolor background of the
-// logo doesn't float awkwardly against the dark theme.
-const MAK_LOGO = require('../../assets/images/icon.png');
+// New v1.0.7 brand logo — watercolor MaK wordmark with transparent background
+// (cream-pixel matte applied so it blends into the dark theme without a circle).
+// WebP keeps file size at ~110KB (vs 530KB+ for full-res PNG).
+const MAK_LOGO = require('../../assets/images/mak-brand.webp');
 
 const BEAUTY_TIPS = [
   { icon: 'sunny-outline', title: 'Sun Protection', text: 'Always apply SPF 30+ sunscreen as the last step of your morning routine, even on cloudy days.', color: '#E8A87C' },
@@ -74,8 +73,11 @@ export default function HomeScreen() {
 
   const waveAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  // Subtle breathing glow around the logo \u2014 native Animated, zero perf cost.
-  const logoGlow = useRef(new Animated.Value(0.3)).current;
+  // v1.0.7: subtle breathing animations for the watercolor MaK logo.
+  // logoBreath: gentle scale 1.00 \u2194 1.04 (loops every ~5s)
+  // logoSway:   tiny rotation -1\u00b0 \u2194 +1\u00b0 (loops every ~7s, out of phase with breath)
+  const logoBreath = useRef(new Animated.Value(0)).current;
+  const logoSway = useRef(new Animated.Value(0)).current;
 
   const todayQuote = BEAUTY_QUOTES[new Date().getDay() % BEAUTY_QUOTES.length];
 
@@ -153,19 +155,31 @@ export default function HomeScreen() {
     return () => pulse.stop();
   }, []);
 
-  // Logo glow: soft pulsing halo behind the brand image (subtle, on-brand)
+  // Logo breathing: gentle scale pulse (1.0 -> 1.04) — calm, on-brand
   useEffect(() => {
-    const glow = Animated.loop(
+    const breath = Animated.loop(
       Animated.sequence([
-        Animated.timing(logoGlow, { toValue: 0.7, duration: 2200, useNativeDriver: true }),
-        Animated.timing(logoGlow, { toValue: 0.3, duration: 2200, useNativeDriver: true }),
+        Animated.timing(logoBreath, { toValue: 1, duration: 2600, useNativeDriver: true }),
+        Animated.timing(logoBreath, { toValue: 0, duration: 2600, useNativeDriver: true }),
       ])
     );
-    glow.start();
-    return () => glow.stop();
+    breath.start();
+    // Tiny sway: -1deg <-> +1deg
+    const sway = Animated.loop(
+      Animated.sequence([
+        Animated.timing(logoSway, { toValue: 1, duration: 3500, useNativeDriver: true }),
+        Animated.timing(logoSway, { toValue: -1, duration: 3500, useNativeDriver: true }),
+        Animated.timing(logoSway, { toValue: 0, duration: 3500, useNativeDriver: true }),
+      ])
+    );
+    sway.start();
+    return () => { breath.stop(); sway.stop(); };
   }, []);
 
   const waveRotate = waveAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '20deg'] });
+  // Logo animation interpolations
+  const logoBreathScale = logoBreath.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] });
+  const logoSwayDeg = logoSway.interpolate({ inputRange: [-1, 1], outputRange: ['-1deg', '1deg'] });
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -243,17 +257,18 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Brand logo \u2014 v1.0.7 uses the official MAK app icon image, framed in a
-            circular container with a soft pink glow so the watercolor logo
-            integrates cleanly with the dark theme. */}
+        {/* Brand logo — v1.0.7: watercolor MaK wordmark with transparent edges,
+            blended directly onto the dark home screen (no circular frame).
+            Subtle dual-animation: gentle scale-breath + tiny side-to-side sway. */}
         <View style={styles.brandCenter}>
-          <View style={styles.logoFrameWrap}>
-            <Animated.View style={[styles.logoGlow, { backgroundColor: colors.primary, opacity: logoGlow }]} />
-            <View style={[styles.logoFrame, { backgroundColor: colors.surface, borderColor: colors.primary }]}>
-              <Image source={MAK_LOGO} style={styles.logoImage} resizeMode="cover" />
-            </View>
-          </View>
-          <Text style={[styles.brandTagline, { color: colors.textSecondary }]} numberOfLines={1}>Your Personalized Makeup Buddy</Text>
+          <Animated.Image
+            source={MAK_LOGO}
+            style={[
+              styles.brandLogo,
+              { transform: [{ scale: logoBreathScale }, { rotate: logoSwayDeg }] },
+            ]}
+            resizeMode="contain"
+          />
         </View>
 
         {/* Single primary CTA — leads to Analyze screen which has the 3 sub-modes */}
@@ -542,13 +557,9 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 14, letterSpacing: 0.3 },
   waveEmoji: { fontSize: 20 },
   userName: { fontSize: 24, fontWeight: '700', marginTop: 2 },
-  // Brand (logo image with soft pink halo glow on dark theme)
-  brandCenter: { alignItems: 'center', marginBottom: 22 },
-  logoFrameWrap: { width: 110, height: 110, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  logoGlow: { position: 'absolute', width: 130, height: 130, borderRadius: 65 },
-  logoFrame: { width: 100, height: 100, borderRadius: 50, borderWidth: 2, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  logoImage: { width: 96, height: 96, borderRadius: 48 },
-  brandTagline: { fontSize: 13, marginTop: 4, fontWeight: '500', letterSpacing: 0.3 },
+  // Brand (watercolor logo blended directly into dark theme, no frame)
+  brandCenter: { alignItems: 'center', marginBottom: 18, marginTop: 4 },
+  brandLogo: { width: 220, height: 175 },
   // Main CTA
   mainCard: { flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: 18, borderWidth: 1, marginBottom: 20 },
   mainCardIcon: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
