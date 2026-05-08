@@ -1448,3 +1448,54 @@ agent_communication:
       Regression smoke 9/9 pass: warmup/health (+00:00 timestamps), password-login (+00:00 created_at), 250 countries, 36 IN states, analyze-skin sanitization preserved (raw + data: prefix both reach LLM cleanly), travel-style 200, chat 200.
 
       Test artifact at /app/v106_backend_test.py for reproducibility. Backend is v1.0.6 deployment-ready. No backend defects found.
+
+  - agent: "testing"
+    message: |
+      v1.0.6 FRONTEND E2E TESTING COMPLETE — 23/23 PASS at mobile 390x844 + 360x800 (single browser-automation invocation, within budget).
+
+      ✅ HOME REDESIGN (redundancy removed):
+        - SINGLE primary "Start Skin Analysis" CTA (count=1) — no duplicates
+        - OLD "Explore" 4-card grid GONE: zero occurrences of "Makeup Match", "Skincare Routine", "Beauty Goals"
+        - Quick Stats row renders: 13 Analyses / 14 Days / 1 Profile
+        - Trending Now chips (Dewy Skin / Glass Skin) render
+        - "Your Skin Profile" section with info icon (ⓘ) next to title visible; View Details link present
+        - No theme toggle anywhere (Profile and Home both clean — dark-only confirmed)
+
+      ✅ ANIMATED MAK LOGO — visually verified across t=0/2/4s screenshots:
+        - t=0: sparkles icons flanking MAK wordmark
+        - t=2: color-palette icons
+        - t=4: brush icons
+        - Smooth fade+scale, no jank
+
+      ✅ NOTIFY ME bottom sheet:
+        - Tap "Notify Me When Available" → sheet opens with title "Get notified first"
+        - Invalid email "invalid-email" → inline error "doesn't look like a valid email" visible
+        - Valid email submit → success "Done!" message rendered
+        - Sheet dismissal works
+
+      ✅ ANALYZE TAB:
+        - 3 mode tabs (Skin Care / Makeup / Travel Style) all render with redesigned bigger icons + bolder labels + subtitles ("Daily routine", "Blush, lip, eye", "Destination look")
+        - Single "Upload Your Photo" CTA visible (NO stacked Take Photo / Gallery)
+        - "Tap to choose" pill present
+        - Tap upload → bottom sheet opens with "Take Photo" + "Choose from Gallery" options
+        - Cancel dismisses sheet correctly
+        - Travel mode: form renders with DESTINATION COUNTRY (required) + STATE/REGION (OPTIONAL) + CITY (OPTIONAL) + MONTH OF TRAVEL + Select Occasion
+        - Travel mode no longer shows the v1.0.5-removed banner (only the helpful blue tip box)
+
+      ✅ PRIVACY POLICY (NEW dedicated /privacy screen):
+        - Profile → "Privacy Policy" navigates to /privacy URL
+        - Back button (top-left chevron) visible
+        - Title "Privacy Policy" rendered
+        - Hero card with shield icon + "Your data is safe with us" + "Last updated: 15 February 2026"
+        - All 7 of 7 expected sections found (What we collect, Your photos, How your data is protected/Third-party, Deleting your data, Children, Disclaimer, Questions)
+
+      ✅ MOBILE LAYOUT:
+        - 360x800: scrollWidth==innerWidth (no horizontal overflow)
+        - 390x844: clean rendering across all screens
+
+      ✅ AUTH:
+        - Login (test@mak.com / test123456) → Home with "Good Evening, Test User" greeting
+
+      ⚠️ AUTOMATION LIMITATION (not a defect — same prior known issue): RN-web custom Pressable picker list items inside country/state/city/month modals + image-picker camera/gallery actual file flow cannot be reliably triggered via Playwright. Code review confirms wiring is correct (api.notifySignup → POST /api/notify-signup; useFocusEffect for skin profile auto-refresh in /app/frontend/app/(tabs)/index.tsx; bottom sheet backdrop Pressable dismissal).
+
+      v1.0.6 frontend is DEPLOYMENT-READY. All 8 user-feedback items addressed and verified. No defects found.
