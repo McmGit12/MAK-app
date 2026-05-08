@@ -74,6 +74,8 @@ export default function AnalyzeScreen() {
   const [citySearch, setCitySearch] = useState('');
   const [travelResult, setTravelResult] = useState<any>(null);
   const [travelLoading, setTravelLoading] = useState(false);
+  // v1.0.6 — Upload-source bottom sheet (Take Photo / Choose from Gallery)
+  const [showUploadSheet, setShowUploadSheet] = useState(false);
   // Error sheet state — replaces Alert.alert("Oops!", ...)
   const [errorVariant, setErrorVariant] = useState<MakErrorVariant | null>(null);
   // Track which action triggered the error so Try Again retries the right call
@@ -297,6 +299,7 @@ export default function AnalyzeScreen() {
         </View>
 
         {/* 3 Mode Tabs */}
+        {/* Mode Tabs — v1.0.6: bolder, bigger, with clearer separation between sections */}
         <View style={[s.tabContainer, { backgroundColor: colors.surfaceVariant }]}>
           {([
             { key: 'skin_care' as Mode, icon: 'leaf', label: 'Skin Care', sub: 'Daily routine' },
@@ -305,9 +308,15 @@ export default function AnalyzeScreen() {
           ]).map((t, idx) => (
             <React.Fragment key={t.key}>
               {idx > 0 && <View style={[s.tabDivider, { backgroundColor: colors.border }]} />}
-              <TouchableOpacity style={[s.modeTab, mode === t.key && { backgroundColor: colors.surface }]} onPress={() => { setMode(t.key); setTravelResult(null); }} activeOpacity={0.7}>
-                <Ionicons name={t.icon as any} size={22} color={mode === t.key ? colors.primary : colors.textTertiary} />
-                <Text style={[s.modeTabLabel, { color: mode === t.key ? colors.text : colors.textTertiary }]}>{t.label}</Text>
+              <TouchableOpacity
+                style={[s.modeTab, mode === t.key && { backgroundColor: colors.surface, borderColor: colors.primary + '60' }]}
+                onPress={() => { setMode(t.key); setTravelResult(null); }}
+                activeOpacity={0.7}
+              >
+                <View style={[s.modeTabIconBg, { backgroundColor: mode === t.key ? colors.primaryLight : 'transparent' }]}>
+                  <Ionicons name={t.icon as any} size={mode === t.key ? 26 : 22} color={mode === t.key ? colors.primary : colors.textTertiary} />
+                </View>
+                <Text style={[s.modeTabLabel, { color: mode === t.key ? colors.text : colors.textSecondary }]}>{t.label}</Text>
                 <Text style={[s.modeTabSub, { color: mode === t.key ? colors.textSecondary : colors.textTertiary }]}>{t.sub}</Text>
               </TouchableOpacity>
             </React.Fragment>
@@ -335,43 +344,41 @@ export default function AnalyzeScreen() {
               </Text>
             </View>
 
-            {/* Image Upload */}
+            {/* Image Upload — v1.0.6: single CTA opens a bottom sheet with the
+                two source options (Take Photo / Gallery). Used to be 3 buttons
+                stacked — now intuitive single tap. */}
             {imageUri ? (
-              <View style={s.imgContainer}>
-                <Image source={{ uri: imageUri }} style={[s.previewImg, { backgroundColor: colors.surfaceVariant }]} contentFit="cover" />
-                <TouchableOpacity style={[s.removeBtn, { backgroundColor: colors.surface }]} onPress={clearImage}><Ionicons name="close-circle" size={32} color={colors.error} /></TouchableOpacity>
-              </View>
+              <>
+                <View style={s.imgContainer}>
+                  <Image source={{ uri: imageUri }} style={[s.previewImg, { backgroundColor: colors.surfaceVariant }]} contentFit="cover" />
+                  <TouchableOpacity style={[s.removeBtn, { backgroundColor: colors.surface }]} onPress={clearImage}><Ionicons name="close-circle" size={32} color={colors.error} /></TouchableOpacity>
+                </View>
+                <View style={s.analyzeRow}>
+                  <TouchableOpacity style={[s.analyzeBtn, { backgroundColor: mode === 'skin_care' ? colors.tertiary : colors.primary }, analyzing && { opacity: 0.7 }]} onPress={analyzeImage} disabled={analyzing}>
+                    <View style={s.analyzeBtnInner}>
+                      {analyzing ? <ActivityIndicator color="#FFF" size="small" /> : <Ionicons name={mode === 'skin_care' ? 'leaf' : 'color-palette'} size={20} color="#FFF" />}
+                      <Text style={s.analyzeBtnText}>{analyzing ? 'Analyzing...' : mode === 'skin_care' ? 'Analyze My Skin' : 'Get Makeup Tips'}</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={clearImage} style={s.retakeBtn}><Text style={[s.retakeText, { color: colors.primary }]}>Choose Different Photo</Text></TouchableOpacity>
+                </View>
+              </>
             ) : (
-              <View style={[s.uploadArea, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <TouchableOpacity
+                style={[s.uploadArea, { backgroundColor: colors.surface, borderColor: (mode === 'skin_care' ? colors.tertiary : colors.primary) + '60' }]}
+                onPress={() => setShowUploadSheet(true)}
+                activeOpacity={0.8}
+              >
                 <View style={[s.uploadIcon, { backgroundColor: mode === 'skin_care' ? colors.tertiaryLight : colors.primaryLight }]}>
-                  <Ionicons name="image-outline" size={40} color={mode === 'skin_care' ? colors.tertiary : colors.primary} />
+                  <Ionicons name="cloud-upload-outline" size={42} color={mode === 'skin_care' ? colors.tertiary : colors.primary} />
                 </View>
                 <Text style={[s.uploadTitle, { color: colors.text }]}>Upload Your Photo</Text>
-                <Text style={[s.uploadDesc, { color: colors.textSecondary }]}>{mode === 'skin_care' ? 'Clean face photo for skin analysis' : 'With or without makeup for personalized tips'}</Text>
-              </View>
-            )}
-
-            {!imageUri ? (
-              <View style={s.actionRow}>
-                <TouchableOpacity style={[s.actionBtn, { backgroundColor: colors.surface, borderColor: colors.borderLight }]} onPress={takePhoto}>
-                  <View style={[s.actionIcon, { backgroundColor: colors.primaryLight }]}><Ionicons name="camera" size={24} color={colors.primary} /></View>
-                  <Text style={[s.actionText, { color: colors.text }]}>Take Photo</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[s.actionBtn, { backgroundColor: colors.surface, borderColor: colors.borderLight }]} onPress={pickImage}>
-                  <View style={[s.actionIcon, { backgroundColor: colors.secondaryLight }]}><Ionicons name="images" size={24} color={colors.secondary} /></View>
-                  <Text style={[s.actionText, { color: colors.text }]}>Gallery</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={s.analyzeRow}>
-                <TouchableOpacity style={[s.analyzeBtn, { backgroundColor: mode === 'skin_care' ? colors.tertiary : colors.primary }, analyzing && { opacity: 0.7 }]} onPress={analyzeImage} disabled={analyzing}>
-                  <View style={s.analyzeBtnInner}>
-                    {analyzing ? <ActivityIndicator color="#FFF" size="small" /> : <Ionicons name={mode === 'skin_care' ? 'leaf' : 'color-palette'} size={20} color="#FFF" />}
-                    <Text style={s.analyzeBtnText}>{analyzing ? 'Analyzing...' : mode === 'skin_care' ? 'Analyze My Skin' : 'Get Makeup Tips'}</Text>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={clearImage} style={s.retakeBtn}><Text style={[s.retakeText, { color: colors.primary }]}>Choose Different Photo</Text></TouchableOpacity>
-              </View>
+                <Text style={[s.uploadDesc, { color: colors.textSecondary }]}>{mode === 'skin_care' ? 'Take a clean face photo or pick one from your gallery' : 'Take a face photo or pick one — with or without makeup'}</Text>
+                <View style={[s.uploadCtaPill, { backgroundColor: (mode === 'skin_care' ? colors.tertiary : colors.primary) + '15', borderColor: (mode === 'skin_care' ? colors.tertiary : colors.primary) + '40' }]}>
+                  <Ionicons name="add-circle" size={16} color={mode === 'skin_care' ? colors.tertiary : colors.primary} />
+                  <Text style={[s.uploadCtaPillText, { color: mode === 'skin_care' ? colors.tertiary : colors.primary }]}>Tap to choose</Text>
+                </View>
+              </TouchableOpacity>
             )}
           </>
         )}
@@ -497,6 +504,51 @@ export default function AnalyzeScreen() {
           <Text style={[s.disclaimerText, { color: colors.textTertiary }]}>{DISCLAIMER}</Text>
         </View>
       </ScrollView>
+
+      {/* Upload-source Bottom Sheet (Take Photo / Choose from Gallery)
+          v1.0.6: replaces the old 2-button row for a more intuitive flow. */}
+      <Modal visible={showUploadSheet} animationType="slide" transparent onRequestClose={() => setShowUploadSheet(false)}>
+        <Pressable style={[s.uploadSheetOverlay, { backgroundColor: colors.overlay }]} onPress={() => setShowUploadSheet(false)}>
+          <Pressable style={[s.uploadSheet, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => {}}>
+            <View style={s.uploadSheetHandle} />
+            <View style={s.uploadSheetHeader}>
+              <Text style={[s.uploadSheetTitle, { color: colors.text }]}>Add a photo</Text>
+              <Text style={[s.uploadSheetSubtitle, { color: colors.textSecondary }]}>How would you like to upload your photo?</Text>
+            </View>
+            <TouchableOpacity
+              style={[s.uploadOption, { backgroundColor: colors.surfaceVariant, borderColor: colors.borderLight }]}
+              onPress={() => { setShowUploadSheet(false); takePhoto(); }}
+              activeOpacity={0.85}
+            >
+              <View style={[s.uploadOptionIcon, { backgroundColor: colors.primaryLight }]}>
+                <Ionicons name="camera" size={26} color={colors.primary} />
+              </View>
+              <View style={s.uploadOptionText}>
+                <Text style={[s.uploadOptionTitle, { color: colors.text }]}>Take Photo</Text>
+                <Text style={[s.uploadOptionDesc, { color: colors.textSecondary }]}>Use your camera now</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.uploadOption, { backgroundColor: colors.surfaceVariant, borderColor: colors.borderLight }]}
+              onPress={() => { setShowUploadSheet(false); pickImage(); }}
+              activeOpacity={0.85}
+            >
+              <View style={[s.uploadOptionIcon, { backgroundColor: colors.secondaryLight }]}>
+                <Ionicons name="images" size={26} color={colors.secondary} />
+              </View>
+              <View style={s.uploadOptionText}>
+                <Text style={[s.uploadOptionTitle, { color: colors.text }]}>Choose from Gallery</Text>
+                <Text style={[s.uploadOptionDesc, { color: colors.textSecondary }]}>Pick from your photos</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowUploadSheet(false)} style={s.uploadSheetCancel}>
+              <Text style={[s.uploadSheetCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Country Picker Modal */}
       <Modal visible={showCountryPicker} animationType="slide" transparent onRequestClose={() => { setShowCountryPicker(false); setCountrySearch(''); }}>
@@ -696,12 +748,31 @@ const s = StyleSheet.create({
   pageSub: { fontSize: 14, marginBottom: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  // Tabs
-  tabContainer: { flexDirection: 'row', borderRadius: 16, padding: 4, marginBottom: 16, overflow: 'hidden' },
-  tabDivider: { width: 1, marginVertical: 8 },
-  modeTab: { flex: 1, alignItems: 'center', paddingVertical: 14, paddingHorizontal: 6, borderRadius: 12 },
-  modeTabLabel: { fontSize: 13, fontWeight: '800', marginTop: 6, textAlign: 'center' },
-  modeTabSub: { fontSize: 10, marginTop: 2, textAlign: 'center' },
+  // Tabs — v1.0.6 redesign: each mode is now visually larger and bolder
+  // with a distinct active-state border and icon background.
+  tabContainer: { flexDirection: 'row', borderRadius: 18, padding: 6, marginBottom: 18, overflow: 'hidden', gap: 4 },
+  tabDivider: { width: 0, marginVertical: 0 },
+  modeTab: { flex: 1, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 6, borderRadius: 14, borderWidth: 1.5, borderColor: 'transparent' },
+  modeTabIconBg: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  modeTabLabel: { fontSize: 14, fontWeight: '800', textAlign: 'center', letterSpacing: 0.3 },
+  modeTabSub: { fontSize: 10, marginTop: 3, textAlign: 'center', fontWeight: '500' },
+  // Upload area — v1.0.6: single-tap CTA opens bottom sheet
+  uploadCtaPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, marginTop: 14 },
+  uploadCtaPillText: { fontSize: 13, fontWeight: '600' },
+  // Upload-source bottom sheet
+  uploadSheetOverlay: { flex: 1, justifyContent: 'flex-end' },
+  uploadSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 30, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1 },
+  uploadSheetHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', marginBottom: 16 },
+  uploadSheetHeader: { alignItems: 'center', marginBottom: 18 },
+  uploadSheetTitle: { fontSize: 20, fontWeight: '700', marginBottom: 4 },
+  uploadSheetSubtitle: { fontSize: 13, textAlign: 'center' },
+  uploadOption: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 10 },
+  uploadOptionIcon: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  uploadOptionText: { flex: 1 },
+  uploadOptionTitle: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  uploadOptionDesc: { fontSize: 12 },
+  uploadSheetCancel: { alignItems: 'center', paddingVertical: 14, marginTop: 4 },
+  uploadSheetCancelText: { fontSize: 14, fontWeight: '500' },
   // Info Banner
   infoBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: 12, marginBottom: 18, borderWidth: 1 },
   infoBannerText: { flex: 1, fontSize: 13, lineHeight: 19 },

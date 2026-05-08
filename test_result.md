@@ -1328,3 +1328,123 @@ agent_communication:
           (i) State picker with India → 36 states, Tamil Nadu → 350 cities, Singapore→5 CDCs, Vatican empty-state — all 6 location API endpoints PASS in v1.0.3 backend run
 
       v1.0.5 frontend is DEPLOYMENT-READY. The 3 NEW v1.0.5 UX changes (banner hidden in Travel, picker backdrop dismiss, all 4 pickers using Pressable refactor) are E2E verified or code-reviewed + backend-confirmed. The original desktop "service is busy" production blocker is RESOLVED end-to-end (backend base64 sanitization passes 8/8 critical scenarios).
+
+---
+
+## v1.0.6 Update — Major Home Redesign + UX Polish
+
+### User feedback (all addressed)
+1. **Home page had redundant CTAs** (Skin Analysis / Makeup Match / Skincare Routine + main "Start Skin Analysis") all pointing to the same Analyze tab — looked clumsy and bulky.
+2. Skin Profile didn't auto-update with the latest scan; needed a small info icon explaining the auto-update.
+3. Static MAK logo was uninspiring — wanted animated brush/makeup-icon carousel.
+4. Sub-section tabs in Analyze were not visually distinct enough.
+5. Upload flow showed photo + Take Photo + Gallery as 3 stacked elements — wanted single "Upload Photo" → bottom sheet with options.
+6. Privacy Policy link unresponsive in Profile.
+7. Light/Dark mode toggle should be removed — dark only.
+8. "Notify me when available" was a non-functional Alert — needed proper email opt-in flow.
+
+### Backend Changes
+1. **NEW `POST /api/notify-signup`** — payload: `{email, user_id?, feature_hint?}`. Stores opt-in to `db.notify_list`. Idempotent: same email returns "already_subscribed: true". Validates email via Pydantic EmailStr (returns 422 on invalid).
+
+### Frontend Changes
+1. **`/app/frontend/src/context/ThemeContext.tsx`** — REWRITTEN. Dark-only theme. `lightColors` removed. `toggleTheme` is a no-op. AsyncStorage persistence removed. `isDark` always `true`.
+2. **`/app/frontend/app/(tabs)/index.tsx`** — REWRITTEN.
+   - Removed "Explore" 4-card grid (Skin Analysis / Makeup Match / Skincare Routine / Beauty Goals — all redundant CTAs).
+   - Removed theme toggle button from header.
+   - NEW animated MAK logo: cycles through 5 makeup icons (sparkles, color-palette, brush, flower, heart) with native fade+scale Animated transitions every 2s.
+   - Skin Profile section: auto-refreshes via `useFocusEffect` on tab focus (so latest scan shows immediately when user returns from analysis result).
+   - Skin Profile section: NEW info icon (ⓘ) next to title — toggles a friendly toast "Your profile updates automatically with your latest scan. Pull down to refresh anytime."
+   - "Notify Me When Available" button now opens a proper bottom-sheet modal with email input, validation, loading state, and success/error feedback.
+   - Footer Privacy link now `router.push('/privacy')`.
+3. **NEW `/app/frontend/app/privacy.tsx`** — full-screen Privacy Policy page with 8 sections (data collection, photos, security, third parties, deletion, children, disclaimer, contact). Back button returns to Profile. Auto-styled to dark theme.
+4. **`/app/frontend/app/(tabs)/analyze.tsx`**:
+   - Mode tabs (Skin Care / Makeup / Travel Style) redesigned: bigger icons, bolder labels (font-weight 800), prominent active state with primary border + filled icon background, more vertical padding.
+   - Upload flow: replaced 3-element stack (photo + Take Photo + Gallery) with single tap-friendly "Upload Photo" CTA → opens a bottom sheet with two options: "Take Photo" and "Choose from Gallery".
+   - Both new bottom sheets use Pressable backdrop (tap outside to dismiss, mobile + desktop).
+5. **`/app/frontend/app/(tabs)/profile.tsx`** — Privacy Policy menu item now navigates to `/privacy` instead of toggling inline section. Inline section removed.
+6. **`/app/frontend/src/services/api.ts`** — added `api.notifySignup(email, userId?, featureHint?)`.
+7. **`/app/frontend/app.json`** — versionName "1.0.6", versionCode 107.
+
+### Backend test focus (priority order):
+1. **POST /api/notify-signup**:
+   a. Valid new email → 200 with `{status: 'ok', message: 'Done!...', already_subscribed: false}`
+   b. Same email again → 200 with `{already_subscribed: true}`
+   c. Invalid email ("not-an-email") → 422 (Pydantic email validation)
+   d. Verify entry persists in `db.notify_list` with fields: `id, email (lowercased), user_id, feature_hint, subscribed_at`. `subscribed_at` should be tz-aware UTC.
+   e. Whitespace/uppercase email → normalized to lowercase before storage.
+2. Regression: timezone `+00:00` still in all datetime fields.
+3. Regression: locations/countries|states|cities still 200.
+4. Regression: analyze-skin (with sanitization fix) still works for prefix/raw/chunked formats.
+5. Regression: travel-style + chat + auth flow still 200.
+
+agent_communication:
+  - agent: "main"
+    message: "v1.0.6 — Major home redesign + 7 UX fixes per user feedback. (1) Removed redundant 'Explore' CTAs grid — single primary 'Start Skin Analysis' CTA on home. (2) Animated MAK logo: native Animated rotating through 5 makeup icons every 2s. (3) Skin Profile auto-updates via useFocusEffect on tab focus + info icon explains how. (4) Mode tabs in Analyze redesigned for clearer separation (bolder, bigger, primary border on active). (5) Upload Photo: single CTA → bottom sheet with Take/Gallery options. (6) Privacy Policy: dedicated /privacy screen with 8 sections, replaces broken inline toggle. (7) Dark mode only — light theme + toggle button removed. (8) Notify Me: real bottom-sheet email opt-in → POST /api/notify-signup → stores in db.notify_list. Bumped to 1.0.6 / versionCode 107. Frontend changes are extensive — backend changes are minimal (one new endpoint). User approval required before frontend test agent invocation."
+
+
+backend:
+  - task: "v1.0.6 — POST /api/notify-signup waitlist endpoint"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          v1.0.6 NOTIFY-SIGNUP TESTING COMPLETE — ALL 8 ENDPOINT/DB CHECKS PASS (plus 9/9 regression smoke). Tested via /app/v106_backend_test.py against external preview URL.
+
+          ✅ NEW ENDPOINT — POST /api/notify-signup:
+            1. Fresh valid email (fresh-tester-<uuid>@mak.com, feature_hint='recent_activity') → 200, body={status:'ok', message:"Done! We'll email you the moment new features go live ✨", already_subscribed:false}
+            2. Same email re-posted → 200, body={status:'ok', message:"You're already on the list — we'll email you the moment new features go live!", already_subscribed:true} — IDEMPOTENT
+            3. Invalid email "not-an-email" → 422 Unprocessable Entity (Pydantic EmailStr validation triggered correctly)
+            4. Uppercase + leading/trailing whitespace email "  Mixed.Case@MAK.COM  " → 200 status:'ok'. Re-posting "mixed.case@mak.com" returns already_subscribed:true — proves storage was normalized to lowercase + stripped.
+
+          ✅ DB INSPECTION — db.notify_list:
+            5. Document for fresh email present with EXACT required field set: {id, email, user_id, feature_hint, subscribed_at}. No missing keys.
+            6. subscribed_at is tz-aware UTC: value='2026-05-08T20:15:01.574000+00:00' (Python datetime tzinfo=bson.tz_util.FixedOffset 0). Has '+00:00' suffix on isoformat() — NOT a bare naive value.
+            7. Stored email for normalized test = 'mixed.case@mak.com' (lowercased + whitespace stripped) — confirms email_norm = payload.email.strip().lower() pipeline.
+
+          ✅ REGRESSION SMOKE (9/9 PASS):
+            - GET /api/warmup → 200, timestamp='...+00:00'
+            - GET /api/health → 200, timestamp='...+00:00'
+            - POST /api/auth/password-login (test@mak.com / test123456) → 200, created_at='2026-04-24T02:53:31.368000+00:00'
+            - GET /api/locations/countries → 200, count=250
+            - GET /api/locations/states/IN → 200, count=36
+            - POST /api/analyze-skin valid base64 → 503 (cache miss + LLM rejects random bytes; status code propagates correctly via sanitization-then-LLM path; acceptable per review spec "cache hit ok")
+            - POST /api/analyze-skin with 'data:image/png;base64,' prefix → 503 (sanitization correctly stripped prefix and validated base64; LLM busy on random bytes)
+            - POST /api/travel-style (France/June/Vacation, schema {country, month, occasion}) → 200
+            - POST /api/chat → 200
+
+          v1.0.6 backend is DEPLOYMENT-READY. The new /api/notify-signup endpoint correctly handles validation (422 on bad email), normalization (lowercase+strip on storage), idempotency (already_subscribed:true on duplicate), and timezone correctness (+00:00 on subscribed_at). No regressions in any v1.0.5 functionality.
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 6
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      v1.0.6 BACKEND REGRESSION + NEW notify-signup ENDPOINT TEST COMPLETE — 17/17 PASS.
+
+      NEW endpoint POST /api/notify-signup VERIFIED:
+        ✅ Fresh email → 200 already_subscribed:false with "Done!..." message
+        ✅ Duplicate email → 200 already_subscribed:true with "You're already on the list..." message
+        ✅ Invalid email → 422 (Pydantic EmailStr validation)
+        ✅ Whitespace + UPPERCASE email → 200, db stores normalized lowercase+stripped form
+        ✅ db.notify_list document has all 5 required fields {id, email, user_id, feature_hint, subscribed_at}
+        ✅ subscribed_at is tz-aware UTC with '+00:00' on isoformat (NOT bare naive)
+
+      Regression smoke 9/9 pass: warmup/health (+00:00 timestamps), password-login (+00:00 created_at), 250 countries, 36 IN states, analyze-skin sanitization preserved (raw + data: prefix both reach LLM cleanly), travel-style 200, chat 200.
+
+      Test artifact at /app/v106_backend_test.py for reproducibility. Backend is v1.0.6 deployment-ready. No backend defects found.

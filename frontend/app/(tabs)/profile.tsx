@@ -26,7 +26,6 @@ export default function ProfileScreen() {
   const { colors } = useTheme();
   const [showFeedback, setShowFeedback] = useState(false);
   const [showFAQ, setShowFAQ] = useState(false);
-  const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
   const [feedbackRating, setFeedbackRating] = useState(5);
@@ -77,7 +76,7 @@ export default function ProfileScreen() {
     { icon: 'help-circle-outline', title: 'FAQ', description: 'Frequently asked questions', onPress: () => setShowFAQ(!showFAQ), accent: colors.tertiary },
     { icon: 'share-social-outline', title: 'Share App', description: 'Invite friends to try MAK', onPress: handleShareApp, accent: colors.secondary },
     { icon: 'chatbubble-outline', title: 'Give Feedback', description: 'Help us improve', onPress: () => setShowFeedback(true), accent: colors.accent },
-    { icon: 'shield-checkmark-outline', title: 'Privacy Policy', description: 'Your data is safe', onPress: () => setShowPrivacy(!showPrivacy), accent: colors.tertiary },
+    { icon: 'shield-checkmark-outline', title: 'Privacy Policy', description: 'Your data is safe', onPress: () => router.push('/privacy'), accent: colors.tertiary },
   ];
 
   return (
@@ -130,19 +129,6 @@ export default function ProfileScreen() {
                 {expandedFAQ === i && <Text style={[st.faqAnswer, { color: colors.textSecondary }]}>{faq.a}</Text>}
               </TouchableOpacity>
             ))}
-          </View>
-        )}
-
-        {/* Privacy Policy Inline */}
-        {showPrivacy && (
-          <View style={[st.faqSection, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
-            <View style={st.faqHeader}>
-              <Ionicons name="shield-checkmark" size={22} color={colors.tertiary} />
-              <Text style={[st.faqHeaderText, { color: colors.text }]}>Privacy Policy</Text>
-            </View>
-            <Text style={[st.faqAnswer, { color: colors.textSecondary, marginTop: 0 }]}>
-              MAK does not store any personal identifying information. Your photos are analyzed in real-time and immediately discarded after processing. We do not share your data with any third parties.{'\n\n'}Your account information (email, name) is stored securely with encrypted passwords. We only use your data to provide personalized beauty recommendations within the app.{'\n\n'}By using MAK, you agree that all recommendations are for informational purposes only and should be tried at your own discretion.
-            </Text>
           </View>
         )}
 

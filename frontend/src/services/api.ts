@@ -187,6 +187,12 @@ export const api = {
     return response.data;
   },
 
+  // Notify-me waitlist signup for "Coming Soon" features
+  notifySignup: async (email: string, userId?: string, featureHint?: string): Promise<{ status: string; message: string; already_subscribed: boolean }> => {
+    const response = await apiClient.post('/notify-signup', { email, user_id: userId, feature_hint: featureHint }, { timeout: 15000 });
+    return response.data;
+  },
+
   // Chatbot
   chatWithMak: async (message: string, sessionId?: string) => {
     const response = await apiClient.post('/chat', { message, session_id: sessionId });

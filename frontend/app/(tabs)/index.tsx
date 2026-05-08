@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,18 +7,33 @@ import {
   TouchableOpacity,
   RefreshControl,
   Dimensions,
-  Alert,
   Animated,
   ActivityIndicator,
+  Modal,
+  Pressable,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
 import { api } from '../../src/services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Animated MAK logo: cycles through makeup-themed icons next to the brand text.
+// Lightweight (zero deps), uses native Animated for smooth fade-cross transitions.
+const LOGO_ICONS: Array<{ name: keyof typeof Ionicons.glyphMap; color: string }> = [
+  { name: 'sparkles', color: '#E8A0BF' },
+  { name: 'color-palette', color: '#C4B0DB' },
+  { name: 'brush', color: '#E85D75' },
+  { name: 'flower', color: '#9DD6C8' },
+  { name: 'heart', color: '#D4A574' },
+];
 
 const BEAUTY_TIPS = [
   { icon: 'sunny-outline', title: 'Sun Protection', text: 'Always apply SPF 30+ sunscreen as the last step of your morning routine, even on cloudy days.', color: '#E8A87C' },
@@ -29,11 +44,11 @@ const BEAUTY_TIPS = [
 ];
 
 const BEAUTY_QUOTES = [
-  { quote: "Beauty begins the moment you decide to be yourself.", author: "Coco Chanel" },
-  { quote: "The best foundation you can wear is glowing, healthy skin.", author: "Beauty Wisdom" },
-  { quote: "Invest in your skin. It is going to represent you for a long time.", author: "Linden Tyler" },
-  { quote: "Nature gives you the face you have at twenty. Life shapes the face you have at thirty.", author: "Coco Chanel" },
-  { quote: "Confidence is the best makeup any woman can wear.", author: "Beauty Wisdom" },
+  { quote: 'Beauty begins the moment you decide to be yourself.', author: 'Coco Chanel' },
+  { quote: 'The best foundation you can wear is glowing, healthy skin.', author: 'Beauty Wisdom' },
+  { quote: 'Invest in your skin. It is going to represent you for a long time.', author: 'Linden Tyler' },
+  { quote: 'Nature gives you the face you have at twenty. Life shapes the face you have at thirty.', author: 'Coco Chanel' },
+  { quote: 'Confidence is the best makeup any woman can wear.', author: 'Beauty Wisdom' },
 ];
 
 const TRENDING = [
@@ -47,14 +62,27 @@ const TRENDING = [
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { colors, isDark, toggleTheme } = useTheme();
+  const { colors } = useTheme();
   const [lastAnalysis, setLastAnalysis] = useState<any>(null);
   const [analysesCount, setAnalysesCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [activeTipIndex, setActiveTipIndex] = useState(0);
+  const [showProfileInfo, setShowProfileInfo] = useState(false);
+
+  // Notify Me bottom-sheet state
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const [notifyEmail, setNotifyEmail] = useState('');
+  const [notifyFeature, setNotifyFeature] = useState<string | null>(null);
+  const [notifyLoading, setNotifyLoading] = useState(false);
+  const [notifyResult, setNotifyResult] = useState<{ success: boolean; message: string } | null>(null);
+
   const waveAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const logoIconIndex = useRef(0);
+  const [activeLogoIcon, setActiveLogoIcon] = useState(0);
+  const logoFade = useRef(new Animated.Value(1)).current;
+  const logoScale = useRef(new Animated.Value(1)).current;
 
   const todayQuote = BEAUTY_QUOTES[new Date().getDay() % BEAUTY_QUOTES.length];
 
@@ -79,21 +107,33 @@ export default function HomeScreen() {
   };
 
   const fetchData = async () => {
-    if (!user?.id) { setPageLoading(false); return; }
+    if (!user?.id) {
+      setPageLoading(false);
+      return;
+    }
     try {
       const analyses = await api.getUserAnalyses(user.id);
       setAnalysesCount(analyses.length);
       if (analyses.length > 0) setLastAnalysis(analyses[0]);
     } catch (err) {
-      console.log('No analyses yet');
+      // No analyses yet — this is OK
     } finally {
       setPageLoading(false);
     }
   };
 
+  // Initial load
   useEffect(() => { fetchData(); }, [user]);
 
-  // Wave animation
+  // Re-fetch every time the home tab regains focus, so the Skin Profile section
+  // reflects the LATEST analysis after the user completes a new scan.
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) fetchData();
+    }, [user?.id])
+  );
+
+  // Wave emoji animation (greets the user)
   useEffect(() => {
     const wave = Animated.loop(
       Animated.sequence([
@@ -108,7 +148,7 @@ export default function HomeScreen() {
     return () => wave.stop();
   }, []);
 
-  // Pulse animation for CTA
+  // Soft pulse on the main CTA card
   useEffect(() => {
     const pulse = Animated.loop(
       Animated.sequence([
@@ -120,25 +160,76 @@ export default function HomeScreen() {
     return () => pulse.stop();
   }, []);
 
+  // Animated MAK logo: rotates through makeup icons every 1.8s with a fade+scale
+  // transition. Native-driver only — no jank, no extra deps.
+  useEffect(() => {
+    const cycle = () => {
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(logoFade, { toValue: 0, duration: 280, useNativeDriver: true, easing: Easing.in(Easing.ease) }),
+          Animated.timing(logoFade, { toValue: 1, duration: 280, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
+        ]),
+        Animated.sequence([
+          Animated.timing(logoScale, { toValue: 0.6, duration: 280, useNativeDriver: true, easing: Easing.in(Easing.ease) }),
+          Animated.timing(logoScale, { toValue: 1, duration: 280, useNativeDriver: true, easing: Easing.out(Easing.back(1.6)) }),
+        ]),
+      ]).start();
+      // Swap icon at the midpoint of the fade
+      setTimeout(() => {
+        logoIconIndex.current = (logoIconIndex.current + 1) % LOGO_ICONS.length;
+        setActiveLogoIcon(logoIconIndex.current);
+      }, 280);
+    };
+    const interval = setInterval(cycle, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
   const waveRotate = waveAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '20deg'] });
 
-  const onRefresh = async () => { setRefreshing(true); await fetchData(); setRefreshing(false); };
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  };
 
   const handleTipScroll = (e: any) => {
     const idx = Math.round(e.nativeEvent.contentOffset.x / (SCREEN_WIDTH - 60));
     setActiveTipIndex(idx);
   };
 
-  const handleNotifyMe = () => {
-    Alert.alert('Stay Tuned!', 'We\'ll notify you as soon as these exciting features are ready!', [{ text: 'Sounds Great' }]);
+  const openNotifyMe = (featureHint?: string) => {
+    setNotifyFeature(featureHint || null);
+    setNotifyEmail(user?.email || '');
+    setNotifyResult(null);
+    setNotifyOpen(true);
   };
 
-  const features = [
-    { icon: 'scan-outline', title: 'Skin Analysis', desc: 'Personalized skin assessment', route: '/(tabs)/analyze', accent: colors.primary },
-    { icon: 'color-palette', title: 'Makeup Match', desc: 'Find your perfect shades', route: '/(tabs)/analyze', accent: colors.secondary },
-    { icon: 'sparkles', title: 'Skincare Routine', desc: 'Custom daily routine', route: '/(tabs)/analyze', accent: colors.tertiary },
-    { icon: 'trending-up', title: 'Beauty Goals', desc: 'Track your progress', route: '/(tabs)/history', accent: colors.accent },
-  ];
+  const closeNotifyMe = () => {
+    setNotifyOpen(false);
+    setNotifyEmail('');
+    setNotifyResult(null);
+    setNotifyFeature(null);
+  };
+
+  const submitNotify = async () => {
+    const email = notifyEmail.trim();
+    if (!email || !email.includes('@') || !email.includes('.')) {
+      setNotifyResult({ success: false, message: "That doesn't look like a valid email \u2014 try again?" });
+      return;
+    }
+    setNotifyLoading(true);
+    setNotifyResult(null);
+    try {
+      const res = await api.notifySignup(email, user?.id, notifyFeature || undefined);
+      setNotifyResult({ success: true, message: res.message });
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      const msg = typeof detail === 'string' ? detail : "Couldn't save your email right now. Please try again.";
+      setNotifyResult({ success: false, message: msg });
+    } finally {
+      setNotifyLoading(false);
+    }
+  };
 
   if (pageLoading) {
     return (
@@ -151,6 +242,8 @@ export default function HomeScreen() {
     );
   }
 
+  const currentLogo = LOGO_ICONS[activeLogoIcon];
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
@@ -158,39 +251,34 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        {/* Header Row */}
+        {/* Header — greeting only (theme toggle removed in v1.0.6 dark-only) */}
         <View style={styles.headerRow}>
           <View style={styles.greetingRow}>
-            <View>
-              <View style={styles.greetingLine}>
-                <Text style={[styles.greeting, { color: colors.textSecondary }]}>{getGreeting()},</Text>
-                <Animated.Text style={[styles.waveEmoji, { transform: [{ rotate: waveRotate }] }]}>
-                  {'\u{1F44B}'}
-                </Animated.Text>
-              </View>
-              <Text style={[styles.userName, { color: colors.text }]}>{getUserName()}</Text>
+            <View style={styles.greetingLine}>
+              <Text style={[styles.greeting, { color: colors.textSecondary }]}>{getGreeting()},</Text>
+              <Animated.Text style={[styles.waveEmoji, { transform: [{ rotate: waveRotate }] }]}>
+                {'\u{1F44B}'}
+              </Animated.Text>
             </View>
+            <Text style={[styles.userName, { color: colors.text }]}>{getUserName()}</Text>
           </View>
-          <TouchableOpacity
-            style={[styles.themeToggle, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}
-            onPress={toggleTheme}
-            activeOpacity={0.7}
-          >
-            <Ionicons name={isDark ? 'sunny' : 'moon'} size={20} color={isDark ? '#F4A460' : '#A98EC4'} />
-          </TouchableOpacity>
         </View>
 
-        {/* Centered MAK Branding */}
+        {/* Animated MAK branding — makeup-icon carousel cycles next to the wordmark */}
         <View style={styles.brandCenter}>
           <View style={styles.brandLogoRow}>
-            <Ionicons name="sparkles" size={18} color={colors.primary} />
+            <Animated.View style={[styles.logoIconWrap, { backgroundColor: currentLogo.color + '20', opacity: logoFade, transform: [{ scale: logoScale }] }]}>
+              <Ionicons name={currentLogo.name} size={20} color={currentLogo.color} />
+            </Animated.View>
             <Text style={[styles.brandName, { color: colors.primary }]}>MAK</Text>
-            <Ionicons name="sparkles" size={18} color={colors.primary} />
+            <Animated.View style={[styles.logoIconWrap, { backgroundColor: currentLogo.color + '20', opacity: logoFade, transform: [{ scale: logoScale }] }]}>
+              <Ionicons name={currentLogo.name} size={20} color={currentLogo.color} />
+            </Animated.View>
           </View>
           <Text style={[styles.brandTagline, { color: colors.textSecondary }]}>Your Personalized Makeup Buddy</Text>
         </View>
 
-        {/* Main CTA */}
+        {/* Single primary CTA — leads to Analyze screen which has the 3 sub-modes */}
         <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
           <TouchableOpacity
             style={[styles.mainCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
@@ -202,7 +290,7 @@ export default function HomeScreen() {
             </View>
             <View style={styles.mainCardText}>
               <Text style={[styles.mainCardTitle, { color: colors.text }]}>Start Skin Analysis</Text>
-              <Text style={[styles.mainCardSubtitle, { color: colors.textSecondary }]}>Snap a photo for personalized beauty recommendations</Text>
+              <Text style={[styles.mainCardSubtitle, { color: colors.textSecondary }]}>Skin care, makeup tips &amp; travel styling — all in one place</Text>
             </View>
             <Ionicons name="arrow-forward-circle" size={28} color={colors.primary} />
           </TouchableOpacity>
@@ -214,26 +302,39 @@ export default function HomeScreen() {
             { icon: 'analytics', num: analysesCount, label: 'Analyses', c: colors.primary, bg: colors.primaryLight },
             { icon: 'calendar', num: getDaysSinceJoined(), label: getDaysSinceJoined() === 1 ? 'Day' : 'Days', c: colors.secondary, bg: colors.secondaryLight },
             { icon: 'heart', num: lastAnalysis ? 1 : 0, label: 'Profile', c: colors.tertiary, bg: colors.tertiaryLight },
-          ].map((s, i) => (
+          ].map((stat, i) => (
             <View key={i} style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
-              <View style={[styles.statIconBg, { backgroundColor: s.bg }]}>
-                <Ionicons name={s.icon as any} size={18} color={s.c} />
+              <View style={[styles.statIconBg, { backgroundColor: stat.bg }]}>
+                <Ionicons name={stat.icon as any} size={18} color={stat.c} />
               </View>
-              <Text style={[styles.statNumber, { color: colors.text }]}>{s.num}</Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{s.label}</Text>
+              <Text style={[styles.statNumber, { color: colors.text }]}>{stat.num}</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{stat.label}</Text>
             </View>
           ))}
         </View>
 
-        {/* Skin Profile */}
+        {/* Skin Profile (auto-refreshes on tab focus + info icon explains how) */}
         {lastAnalysis && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Skin Profile</Text>
+              <View style={styles.sectionTitleRow}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Skin Profile</Text>
+                <TouchableOpacity onPress={() => setShowProfileInfo((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="information-circle-outline" size={18} color={colors.textTertiary} />
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity onPress={() => router.push({ pathname: '/analysis-result', params: { analysisId: lastAnalysis.id } })}>
                 <Text style={[styles.seeAll, { color: colors.primary }]}>View Details</Text>
               </TouchableOpacity>
             </View>
+            {showProfileInfo && (
+              <View style={[styles.infoToast, { backgroundColor: colors.primaryLight, borderColor: colors.primary + '30' }]}>
+                <Ionicons name="sparkles" size={14} color={colors.primary} />
+                <Text style={[styles.infoToastText, { color: colors.text }]}>
+                  Your profile updates automatically with your latest scan. Pull down to refresh anytime.
+                </Text>
+              </View>
+            )}
             <View style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
               <View style={styles.profileGrid}>
                 {[
@@ -253,12 +354,17 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Trending */}
+        {/* Trending Now */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Trending Now</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendingScroll}>
             {TRENDING.map((t, i) => (
-              <TouchableOpacity key={i} style={[styles.trendingChip, { backgroundColor: colors.surface, borderColor: colors.borderLight }]} activeOpacity={0.7} onPress={() => router.push({ pathname: '/(tabs)/analyze', params: { trendMode: 'makeup', trendLabel: t.label } })}>
+              <TouchableOpacity
+                key={i}
+                style={[styles.trendingChip, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
+                activeOpacity={0.7}
+                onPress={() => router.push({ pathname: '/(tabs)/analyze', params: { trendMode: 'makeup', trendLabel: t.label } })}
+              >
                 <View style={[styles.trendingChipIcon, { backgroundColor: `${t.color}20` }]}>
                   <Ionicons name={t.icon as any} size={16} color={t.color} />
                 </View>
@@ -266,22 +372,6 @@ export default function HomeScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
-        </View>
-
-        {/* Features */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Explore</Text>
-          <View style={styles.featuresGrid}>
-            {features.map((f, i) => (
-              <TouchableOpacity key={i} style={[styles.featureCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]} onPress={() => router.push(f.route as any)} activeOpacity={0.8}>
-                <View style={[styles.featureIcon, { backgroundColor: `${f.accent}18` }]}>
-                  <Ionicons name={f.icon as any} size={22} color={f.accent} />
-                </View>
-                <Text style={[styles.featureTitle, { color: colors.text }]}>{f.title}</Text>
-                <Text style={[styles.featureDesc, { color: colors.textSecondary }]}>{f.desc}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
         </View>
 
         {/* Beauty Tips Carousel */}
@@ -294,7 +384,16 @@ export default function HomeScreen() {
               ))}
             </View>
           </View>
-          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onScroll={handleTipScroll} scrollEventThrottle={16} decelerationRate="fast" snapToInterval={SCREEN_WIDTH - 40} contentContainerStyle={{ paddingRight: 20 }}>
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={handleTipScroll}
+            scrollEventThrottle={16}
+            decelerationRate="fast"
+            snapToInterval={SCREEN_WIDTH - 40}
+            contentContainerStyle={{ paddingRight: 20 }}
+          >
             {BEAUTY_TIPS.map((tip, i) => (
               <View key={i} style={[styles.tipCard, { width: SCREEN_WIDTH - 60, backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
                 <View style={[styles.tipIconCircle, { backgroundColor: `${tip.color}20` }]}>
@@ -329,9 +428,9 @@ export default function HomeScreen() {
           </View>
 
           {[
-            { icon: 'notifications', title: 'Recent Activity Notes', desc: 'Personalized notes about your beauty journey.', ic: colors.primary, bg: colors.primaryLight, items: ['Daily beauty insights', 'Progress milestones', 'Personalized reminders'] },
-            { icon: 'heart', title: 'Set Your Favorites', desc: 'Save favorite products and routines.', ic: colors.secondary, bg: colors.secondaryLight, items: ['Favorite products', 'Custom routines', 'Smart recommendations'] },
-            { icon: 'people', title: 'Beauty Community', desc: 'Connect, share tips, discover trends.', ic: colors.tertiary, bg: colors.tertiaryLight, items: ['Share beauty looks', 'Expert Q&A sessions'] },
+            { hint: 'recent_activity', icon: 'notifications', title: 'Recent Activity Notes', desc: 'Personalized notes about your beauty journey.', ic: colors.primary, bg: colors.primaryLight, items: ['Daily beauty insights', 'Progress milestones', 'Personalized reminders'] },
+            { hint: 'favorites', icon: 'heart', title: 'Set Your Favorites', desc: 'Save favorite products and routines.', ic: colors.secondary, bg: colors.secondaryLight, items: ['Favorite products', 'Custom routines', 'Smart recommendations'] },
+            { hint: 'community', icon: 'people', title: 'Beauty Community', desc: 'Connect, share tips, discover trends.', ic: colors.tertiary, bg: colors.tertiaryLight, items: ['Share beauty looks', 'Expert Q&A sessions'] },
           ].map((card, ci) => (
             <View key={ci} style={[styles.comingSoonCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
               <View style={styles.comingSoonCardInner}>
@@ -356,7 +455,7 @@ export default function HomeScreen() {
             </View>
           ))}
 
-          <TouchableOpacity style={[styles.notifyBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8} onPress={handleNotifyMe}>
+          <TouchableOpacity style={[styles.notifyBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8} onPress={() => openNotifyMe()}>
             <Ionicons name="notifications-outline" size={18} color="#FFF" />
             <Text style={styles.notifyBtnText}>Notify Me When Available</Text>
           </TouchableOpacity>
@@ -370,12 +469,85 @@ export default function HomeScreen() {
             <Ionicons name="sparkles" size={12} color={colors.primary} />
             <Text style={[styles.footerBrandText, { color: colors.textTertiary }]}>MAK v1.0</Text>
           </View>
-          <View style={styles.footerDisclaimer}>
+          <TouchableOpacity onPress={() => router.push('/privacy')} style={styles.footerDisclaimer}>
             <Ionicons name="shield-checkmark-outline" size={12} color={colors.textTertiary} />
-            <Text style={[styles.footerDisclaimerText, { color: colors.textTertiary }]}>We respect your privacy and do not store any personal data. Try recommendations at your own discretion.</Text>
-          </View>
+            <Text style={[styles.footerDisclaimerText, { color: colors.textTertiary }]}>We respect your privacy and do not store any personal data. Read our Privacy Policy.</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* ============================================================
+          NOTIFY ME — bottom-sheet email opt-in modal.
+          Submits to /api/notify-signup → stores in db.notify_list.
+          ============================================================ */}
+      <Modal visible={notifyOpen} animationType="slide" transparent onRequestClose={closeNotifyMe}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable style={[styles.notifyOverlay, { backgroundColor: colors.overlay }]} onPress={closeNotifyMe}>
+            <Pressable style={[styles.notifySheet, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => {}}>
+              <View style={styles.notifySheetHandle} />
+              {/* Header */}
+              <View style={styles.notifyHeader}>
+                <View style={[styles.notifyIconCircle, { backgroundColor: colors.primaryLight }]}>
+                  <Ionicons name="notifications" size={26} color={colors.primary} />
+                </View>
+                <Text style={[styles.notifyTitle, { color: colors.text }]}>Get notified first</Text>
+                <Text style={[styles.notifySubtitle, { color: colors.textSecondary }]}>
+                  Drop your email and we&apos;ll let you know the moment new features go live. No spam, ever.
+                </Text>
+              </View>
+
+              {/* Result message OR input */}
+              {notifyResult?.success ? (
+                <View style={[styles.notifyResult, { backgroundColor: colors.tertiaryLight, borderColor: colors.tertiary + '40' }]}>
+                  <Ionicons name="checkmark-circle" size={28} color={colors.tertiary} />
+                  <Text style={[styles.notifyResultText, { color: colors.text }]}>{notifyResult.message}</Text>
+                </View>
+              ) : (
+                <>
+                  <TextInput
+                    style={[styles.notifyInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                    placeholder="you@example.com"
+                    placeholderTextColor={colors.textTertiary}
+                    value={notifyEmail}
+                    onChangeText={(v) => { setNotifyEmail(v); setNotifyResult(null); }}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    autoCorrect={false}
+                    editable={!notifyLoading}
+                  />
+                  {notifyResult && !notifyResult.success && (
+                    <View style={styles.notifyErrorRow}>
+                      <Ionicons name="alert-circle" size={14} color={colors.error} />
+                      <Text style={[styles.notifyErrorText, { color: colors.error }]}>{notifyResult.message}</Text>
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.notifySubmitBtn, { backgroundColor: colors.primary, opacity: notifyLoading ? 0.7 : 1 }]}
+                    onPress={submitNotify}
+                    disabled={notifyLoading}
+                    activeOpacity={0.85}
+                  >
+                    {notifyLoading ? (
+                      <ActivityIndicator color="#FFF" size="small" />
+                    ) : (
+                      <>
+                        <Ionicons name="paper-plane" size={16} color="#FFF" />
+                        <Text style={styles.notifySubmitText}>Notify Me</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {/* Close / Done */}
+              <TouchableOpacity onPress={closeNotifyMe} style={styles.notifyCloseBtn}>
+                <Text style={[styles.notifyCloseText, { color: colors.textSecondary }]}>{notifyResult?.success ? 'Done' : 'Maybe later'}</Text>
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -392,12 +564,12 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 14, letterSpacing: 0.3 },
   waveEmoji: { fontSize: 20 },
   userName: { fontSize: 24, fontWeight: '700', marginTop: 2 },
-  themeToggle: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
-  // Brand
+  // Brand (animated logo carousel)
   brandCenter: { alignItems: 'center', marginBottom: 20 },
-  brandLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  brandName: { fontSize: 26, fontWeight: '800', letterSpacing: 3 },
-  brandTagline: { fontSize: 12, marginTop: 4 },
+  brandLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  logoIconWrap: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  brandName: { fontSize: 28, fontWeight: '800', letterSpacing: 4 },
+  brandTagline: { fontSize: 12, marginTop: 6 },
   // Main CTA
   mainCard: { flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: 18, borderWidth: 1, marginBottom: 20 },
   mainCardIcon: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
@@ -413,8 +585,11 @@ const styles = StyleSheet.create({
   // Section
   section: { marginBottom: 24 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 14 },
   seeAll: { fontSize: 13, fontWeight: '600', marginBottom: 14 },
+  infoToast: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 12, marginTop: -6 },
+  infoToastText: { flex: 1, fontSize: 12, lineHeight: 17 },
   // Profile
   profileCard: { borderRadius: 16, padding: 14, borderWidth: 1 },
   profileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -427,12 +602,6 @@ const styles = StyleSheet.create({
   trendingChip: { flexDirection: 'row', alignItems: 'center', borderRadius: 24, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 1, gap: 8 },
   trendingChipIcon: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
   trendingChipLabel: { fontSize: 13, fontWeight: '500' },
-  // Features
-  featuresGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  featureCard: { width: '48%', borderRadius: 16, padding: 16, borderWidth: 1 },
-  featureIcon: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  featureTitle: { fontSize: 14, fontWeight: '600', marginBottom: 4 },
-  featureDesc: { fontSize: 12, lineHeight: 16 },
   // Tips
   tipDots: { flexDirection: 'row', gap: 5, marginBottom: 14 },
   tipDot: { width: 6, height: 6, borderRadius: 3 },
@@ -470,4 +639,21 @@ const styles = StyleSheet.create({
   footerBrandText: { fontSize: 11, fontWeight: '600' },
   footerDisclaimer: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, marginTop: 10, paddingHorizontal: 16 },
   footerDisclaimerText: { flex: 1, fontSize: 9, lineHeight: 14, textAlign: 'center' },
+  // Notify Me bottom sheet
+  notifyOverlay: { flex: 1, justifyContent: 'flex-end' },
+  notifySheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 34, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1 },
+  notifySheetHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', marginBottom: 14 },
+  notifyHeader: { alignItems: 'center', marginBottom: 20 },
+  notifyIconCircle: { width: 56, height: 56, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  notifyTitle: { fontSize: 20, fontWeight: '700', marginBottom: 6 },
+  notifySubtitle: { fontSize: 13, lineHeight: 19, textAlign: 'center', paddingHorizontal: 8 },
+  notifyInput: { borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, borderWidth: 1, marginBottom: 8 },
+  notifyErrorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6, paddingHorizontal: 4 },
+  notifyErrorText: { fontSize: 12, flex: 1 },
+  notifySubmitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 14, marginTop: 8 },
+  notifySubmitText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  notifyResult: { alignItems: 'center', gap: 10, padding: 18, borderRadius: 14, borderWidth: 1, marginVertical: 4 },
+  notifyResultText: { fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  notifyCloseBtn: { alignItems: 'center', paddingVertical: 14, marginTop: 8 },
+  notifyCloseText: { fontSize: 14, fontWeight: '500' },
 });

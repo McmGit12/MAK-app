@@ -695,6 +695,60 @@ async def get_cities(country_code: str, state_code: str):
     return _CITIES_BY_STATE.get((country_code.upper(), state_code.upper()), [])
 
 
+# ============================================================
+# NOTIFY-ME WAITLIST — for "Coming Soon" features on the home page.
+# Stores email addresses opted-in to be notified when new features ship.
+# ============================================================
+
+class NotifySignupRequest(BaseModel):
+    email: EmailStr
+    user_id: Optional[str] = None
+    feature_hint: Optional[str] = None  # which "coming soon" card the user tapped from
+
+
+class NotifySignupResponse(BaseModel):
+    status: str
+    message: str
+    already_subscribed: bool = False
+
+
+@api_router.post("/notify-signup", response_model=NotifySignupResponse)
+async def notify_signup(payload: NotifySignupRequest):
+    """Add the user to the notify-me waitlist for upcoming features."""
+    email_norm = payload.email.strip().lower()
+    try:
+        existing = await asyncio.wait_for(
+            db.notify_list.find_one({"email": email_norm}),
+            timeout=5,
+        )
+        if existing:
+            return NotifySignupResponse(
+                status="ok",
+                message="You're already on the list \u2014 we'll email you the moment new features go live!",
+                already_subscribed=True,
+            )
+        await asyncio.wait_for(
+            db.notify_list.insert_one({
+                "id": str(uuid.uuid4()),
+                "email": email_norm,
+                "user_id": payload.user_id,
+                "feature_hint": payload.feature_hint,
+                "subscribed_at": now_utc(),
+            }),
+            timeout=5,
+        )
+        return NotifySignupResponse(
+            status="ok",
+            message="Done! We'll email you the moment new features go live \u2728",
+            already_subscribed=False,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=503, detail="Service is busy. Please try again.")
+    except Exception as e:
+        logger.error(f"notify_signup error: {e}")
+        raise HTTPException(status_code=500, detail="Couldn't save your email. Please try again.")
+
+
 @api_router.post("/auth/check-email")
 async def check_email(data: CheckEmailRequest):
     """Check if email is registered"""
