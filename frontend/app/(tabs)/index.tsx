@@ -55,7 +55,7 @@ const TRENDING = [
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { colors } = useTheme();
+  const { colors, isDark, toggleTheme } = useTheme();
   const [lastAnalysis, setLastAnalysis] = useState<any>(null);
   const [analysesCount, setAnalysesCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -214,7 +214,10 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        {/* Header — greeting only (theme toggle removed in v1.0.6 dark-only) */}
+        {/* Header — greeting on the left, theme toggle icon on the right.
+            v1.0.11: theme toggle restored to the home header (where it lived
+            in v1.0.3-1.0.5) per user request. Tap sun = switch to dark,
+            tap moon = switch to light. */}
         <View style={styles.headerRow}>
           <View style={styles.greetingRow}>
             <View style={styles.greetingLine}>
@@ -223,8 +226,17 @@ export default function HomeScreen() {
                 {'\u{1F44B}'}
               </Animated.Text>
             </View>
-            <Text style={[styles.userName, { color: colors.text }]}>{getUserName()}</Text>
+            <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>{getUserName()}</Text>
           </View>
+          <TouchableOpacity
+            style={[styles.themeToggleBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            onPress={toggleTheme}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            <Ionicons name={isDark ? 'sunny' : 'moon'} size={20} color={colors.primary} />
+          </TouchableOpacity>
         </View>
 
         {/* User-supplied MAK wordmark image with sparkles. Background was stripped
@@ -514,12 +526,13 @@ const styles = StyleSheet.create({
   loadingScreen: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
   loadingText: { fontSize: 14 },
   // Header
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12 },
   greetingRow: { flex: 1 },
   greetingLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   greeting: { fontSize: 14, letterSpacing: 0.3 },
   waveEmoji: { fontSize: 20 },
   userName: { fontSize: 24, fontWeight: '700', marginTop: 2 },
+  themeToggleBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
   // Brand wordmark — user-supplied image with sparkles + MAK letters
   brandCenter: { alignItems: 'center', marginBottom: 22, marginTop: 4 },
   brandWordmark: { width: 220, height: 60 },

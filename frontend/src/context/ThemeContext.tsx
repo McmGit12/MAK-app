@@ -90,9 +90,10 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const THEME_KEY = '@mak_theme';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  // v1.0.8: BOTH light & dark modes restored (per user feedback). Default = dark
-  // since most testers preferred it. User preference persisted via AsyncStorage.
-  const [isDark, setIsDark] = useState(true);
+  // v1.0.11: Default = LIGHT mode (per user — original behavior from v1.0.3 era).
+  // User can toggle to dark via the icon on the home-screen header (right side).
+  // Preference persisted via AsyncStorage at @mak_theme.
+  const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
     (async () => {
