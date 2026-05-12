@@ -1756,3 +1756,24 @@ test_plan:
   test_all: false
   test_priority: "high_first"
 
+
+---
+
+## v1.0.11 iOS Submission Smoke Regression (2026-05-12)
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      v1.0.11 SMOKE REGRESSION — ALL 8 CORE ENDPOINTS PASS (8/8). Pre-iOS-submission readiness confirmed. No backend code changes since v1.0.8 (32/32 pass). Re-tested against external preview URL via /app/smoke_test_v1011.py:
+
+      ✅ 1. GET /api/health → 200, mongodb=connected, llm_key_configured=true, timestamp='2026-05-12T07:18:28.382079+00:00' (+00:00 present)
+      ✅ 2. GET /api/warmup → 200 in 0.16s, mongodb=warm, timestamp has +00:00
+      ✅ 3. POST /api/auth/password-login (test@mak.com / test123456) → 200, user_id=9e846c3c-f6b1-49fc-98f9-a3f9c7925d78, created_at='2026-04-24T02:53:31.368000+00:00' (legacy NAIVE user correctly returned tz-aware via Motor tz_aware=True + field_serializer)
+      ✅ 4. POST /api/analyze-skin with real test image (152864 base64 chars) → 200 in 0.22s — CACHE HIT (image_hash caching working), skin_type=combination, skin_tone=medium, created_at has +00:00
+      ✅ 5. POST /api/notify-signup (smoke_ios_<ts>@example.com) → 200, message="Done! We'll email you the moment new features go live ✨", already_subscribed=false
+      ✅ 6. GET /api/locations/countries → 200, exactly 250 countries returned
+      ✅ 7. POST /api/travel-style (France/June/Wedding) → 200 in 14.81s, ai_status='ok', full payload returned
+      ✅ 8. POST /api/chat ("What's the best moisturizer for oily skin?") → 200 in 1.14s, ai_status='ok', 317-char response, no 'Sorry we are experiencing'/'Oops' phrases
+
+      Zero regressions. Backend is iOS-submission ready.
+
