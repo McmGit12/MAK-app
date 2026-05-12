@@ -234,6 +234,8 @@ export default function HomeScreen() {
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            accessibilityRole="button"
+            testID="theme-toggle"
           >
             <Ionicons name={isDark ? 'sunny' : 'moon'} size={20} color={colors.primary} />
           </TouchableOpacity>
