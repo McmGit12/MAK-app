@@ -233,8 +233,8 @@ PERMISSIONS:
 PRIVACY:
 - No third-party tracking, no analytics SDKs, no ads.
 - Photos are sent to our backend solely to generate the analysis. They are not used to train any model and are not shared with third parties.
-- Full privacy policy: https://[YOUR-GITHUB-USERNAME].github.io/mak-app/privacy.html
-- Support: https://[YOUR-GITHUB-USERNAME].github.io/mak-app/support.html
+- Full privacy policy: https://mcmgit12.github.io/MAK-app/privacy.html
+- Support: https://mcmgit12.github.io/MAK-app/support.html
   (Also reachable via makapp.support@gmail.com)
 
 DISCLAIMER:
