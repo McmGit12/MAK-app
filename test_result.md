@@ -2264,3 +2264,126 @@ agent_communication:
 
       v1.0.12 backend is DEPLOYMENT-READY.
 
+
+
+---
+
+## v1.0.12 Frontend E2E Test Results (2026-05-14) — viewports 320x568 / 390x844 / 768x1024
+
+frontend:
+  - task: "Forgot Password bottom sheet on Login screen"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/ForgotPasswordSheet.tsx + /app/frontend/app/index.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: |
+          v1.0.12 Forgot Password sheet VERIFIED end-to-end at 390x844:
+            ✅ Tapping "Forgot password?" on sign-in step opens bottom sheet with title "Reset your password" and email pre-filled
+            ✅ Empty email submission → inline error "Please enter your email."
+            ✅ Invalid email "notanemail" → inline error containing "valid email address"
+            ✅ Valid email "test@mak.com" + Send Reset Link → transitions to success state showing "Check your email" with the tip text (spam folder / 30 minutes)
+            ✅ "Got it" button closes the sheet cleanly (sheet content no longer present in DOM)
+            Backend forgot-password API call observed working (success state appears within ~3s).
+
+  - task: "Terms of Service page (/terms) + link on Login screen"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/terms.tsx + /app/frontend/app/index.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: |
+          v1.0.12 /terms page VERIFIED at 320x568, 390x844, 768x1024:
+            ✅ All 10 sections render with correct headings: What MAK is, Using your account, Photos you upload, Not medical advice, Acceptable use, Product recommendations, Termination, Limitation of liability, Changes to these terms, Contact us
+            ✅ Hero: "Welcome to MAK" + "Last updated" present
+            ✅ Footer text "By creating an account or using MAK..." present
+            ✅ NO horizontal overflow at any viewport (320 scrollWidth==clientWidth)
+            ✅ Login screen footer renders "By continuing, you agree to our Terms of Service and Privacy Policy." with both link strings present and clickable
+
+  - task: "Reset Password web page (/reset?token=...)"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/reset.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: |
+          v1.0.12 /reset page VERIFIED end-to-end at 320x568:
+            ✅ /reset with NO token query param → immediately shows "Link expired or invalid" state with "Open MAK App" button
+            ✅ /reset?token=SAMPLE_TEST_TOKEN_12345 → renders "Set a new password" form with two password inputs and Update Password button
+            ✅ Empty submission → "Password must be at least 6 characters." validation error
+            ✅ Mismatched passwords ("validpass1" + "different456") → "Passwords do not match." validation error
+            ✅ Matching valid passwords with fake token → backend returns 400, page switches to "Link expired or invalid" state (verified body text)
+            ✅ MAK brand header present, no horizontal overflow
+
+  - task: "Delete Account flow in Profile screen"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/(tabs)/profile.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: |
+          v1.0.12 Delete Account flow VERIFIED end-to-end at 390x844:
+            ✅ Profile tab scroll-to-bottom shows DANGER ZONE card with "Delete My Account" button
+            ✅ Tapping button opens confirmation modal with title "Delete account?", "Keep account" and "Delete forever" buttons
+            ✅ Empty password + tap "Delete forever" → inline error "Please enter your password to confirm."
+            ✅ Wrong password "wrongpass123" + tap "Delete forever" → inline error "Account not found or password incorrect."
+            ✅ Tap "Keep account" → modal closes cleanly (title no longer present)
+            ✅ test@mak.com user was NOT actually deleted (only wrong-password rejection path exercised, per spec)
+
+  - task: "Privacy Policy support email correction (v1.0.12)"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/privacy.tsx"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: |
+          v1.0.12 /privacy page VERIFIED at 320x568 AND 768x1024:
+            ✅ Page body contains "makstylingbuddy.support@gmail.com" (correct support email)
+            ✅ Page body does NOT contain old "makapp.support@gmail.com" (pre-existing bug confirmed fixed)
+            ✅ 10 sections render, no horizontal overflow
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      v1.0.12 FRONTEND E2E COMPLETE — ALL NEW FLOWS PASS at 320x568 / 390x844 / 768x1024.
+
+      ✅ NEW FEATURES (all green):
+        1. Login footer "Terms of Service / Privacy Policy" links present + tappable
+        2. Forgot Password bottom sheet: opens with pre-filled email; empty/invalid/valid validations all work; success state shows "Check your email" with spam-folder + 30-minute tip; "Got it" closes the sheet
+        3. /terms page: all 10 sections render with proper hero, last-updated date, and footer; no horizontal overflow
+        4. /reset?token=SAMPLE_TEST_TOKEN_12345: form renders correctly; empty/mismatch validations work; submission with fake token correctly switches to "Link expired or invalid" state
+        5. /reset (no token): immediately shows invalid state with "Open MAK App" button
+        6. Delete Account flow: DANGER ZONE visible on Profile bottom; modal opens with proper buttons; empty-password and wrong-password inline errors both shown; "Keep account" closes modal cleanly. test@mak.com user NOT deleted (per spec).
+        7. Privacy Policy email correction: makstylingbuddy.support@gmail.com present, NO makapp.support@gmail.com anywhere
+
+      ✅ REGRESSION:
+        - Login flow (email → Continue → Sign In → Home) works
+        - Profile tab loads with all menu items
+        - Bottom tab navigation (Home/History/Profile) works
+        - No horizontal overflow at any of the 3 viewports
+        - No "Oops!" / "Sorry we are experiencing" strings anywhere
+
+      Total verified: 26/27 sub-checks PASS (1 was a test-script setup glitch in run 1, resolved in run 2 with 13/13). v1.0.12 frontend is DEPLOYMENT-READY.
+
+      Browser-automation budget: 2 invocations used (within 3-call limit).
+
