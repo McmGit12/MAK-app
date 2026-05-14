@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme } from '../src/context/ThemeContext';
 import { api } from '../src/services/api';
+import ForgotPasswordSheet from '../src/components/ForgotPasswordSheet';
 
 type Step = 'email' | 'signin' | 'register';
 
 const sanitize = (text: string) => text.replace(/<[^>]*>|javascript:|on\w+=/gi, '');
-const SUPPORT_EMAIL = 'support@makbuddy.app';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -30,6 +30,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotSheetVisible, setForgotSheetVisible] = useState(false);
 
   const handleCheckEmail = async () => {
     const e = sanitize(email.trim().toLowerCase());
@@ -78,29 +79,9 @@ export default function LoginScreen() {
     setStep('email');
   };
 
-  const handleForgotPassword = async () => {
-    const e = email.trim().toLowerCase();
-    const subject = 'Password Reset Request — MAK';
-    const body = `Hi MAK Support team,\n\nI'd like to reset my password for the account: ${e || '[your email]'}\n\nPlease assist.\n\nThanks!`;
-    const mailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    try {
-      const can = await Linking.canOpenURL(mailto);
-      if (can) {
-        await Linking.openURL(mailto);
-      } else {
-        Alert.alert(
-          'Reset Your Password',
-          `Please email us at ${SUPPORT_EMAIL} from your registered email and we'll help you reset your password within 24 hours.`,
-          [{ text: 'Got it', style: 'default' }]
-        );
-      }
-    } catch {
-      Alert.alert(
-        'Reset Your Password',
-        `Please email us at ${SUPPORT_EMAIL} and we'll help you reset your password within 24 hours.`,
-        [{ text: 'Got it', style: 'default' }]
-      );
-    }
+  const handleForgotPassword = () => {
+    setError('');
+    setForgotSheetVisible(true);
   };
 
   return (
@@ -183,8 +164,30 @@ export default function LoginScreen() {
           </View>
 
           <Text style={[st.privacy, { color: colors.textTertiary }]}>We respect your privacy. No personal data is shared with third parties.</Text>
+
+          {/* Terms & Privacy */}
+          <View style={st.termsRow}>
+            <Text style={[st.termsText, { color: colors.textTertiary }]}>
+              By continuing, you agree to our{' '}
+            </Text>
+            <TouchableOpacity onPress={() => router.push('/terms')} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+              <Text style={[st.termsLink, { color: colors.primary }]}>Terms of Service</Text>
+            </TouchableOpacity>
+            <Text style={[st.termsText, { color: colors.textTertiary }]}> and </Text>
+            <TouchableOpacity onPress={() => router.push('/privacy')} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+              <Text style={[st.termsLink, { color: colors.primary }]}>Privacy Policy</Text>
+            </TouchableOpacity>
+            <Text style={[st.termsText, { color: colors.textTertiary }]}>.</Text>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Forgot Password Bottom Sheet */}
+      <ForgotPasswordSheet
+        visible={forgotSheetVisible}
+        initialEmail={email}
+        onClose={() => setForgotSheetVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -211,4 +214,7 @@ const st = StyleSheet.create({
   forgotRow: { alignItems: 'center', marginTop: 14, paddingVertical: 6 },
   forgotText: { fontSize: 13, fontWeight: '600' },
   privacy: { fontSize: 11, textAlign: 'center', marginTop: 20 },
+  termsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', marginTop: 8, paddingHorizontal: 16 },
+  termsText: { fontSize: 11, lineHeight: 16 },
+  termsLink: { fontSize: 11, lineHeight: 16, fontWeight: '700', textDecorationLine: 'underline' },
 });
