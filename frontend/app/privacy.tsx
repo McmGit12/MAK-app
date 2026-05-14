@@ -29,7 +29,7 @@ const SECTIONS: { title: string; body: string; icon: keyof typeof Ionicons.glyph
   {
     icon: 'trash-outline',
     title: 'Deleting your data',
-    body: 'You can delete your account at any time from Profile \u2192 Delete Account, or by emailing makapp.support@gmail.com. Account deletion permanently removes your email, password hash, display name, and all your past analyses from our servers within 7 days.',
+    body: 'You can delete your account at any time from Profile \u2192 Delete My Account, which permanently removes all your data within 7 days. You can also email us at makstylingbuddy.support@gmail.com if you need help. Account deletion permanently removes your email, password hash, display name, and all your past analyses from our servers.',
   },
   {
     icon: 'people-outline',
@@ -44,7 +44,7 @@ const SECTIONS: { title: string; body: string; icon: keyof typeof Ionicons.glyph
   {
     icon: 'mail-outline',
     title: 'Questions or concerns',
-    body: 'If you have any questions about this policy or want to exercise your data rights, email us at makapp.support@gmail.com. We respond within 5 business days.',
+    body: 'If you have any questions about this policy or want to exercise your data rights, email us at makstylingbuddy.support@gmail.com. We respond within 5 business days.',
   },
 ];
 

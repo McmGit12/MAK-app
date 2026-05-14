@@ -34,6 +34,12 @@ export default function ProfileScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  // ===== Delete Account state (Apple/Google Play compliance) =====
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
   const handleShareApp = async () => {
     try {
       await Share.share({ message: 'Check out MAK - Your Personalized Makeup Buddy! Get personalized skin analysis and makeup recommendations.', title: 'MAK' });
@@ -50,6 +56,27 @@ export default function ProfileScreen() {
     } catch (err) {
       console.error('Logout error:', err);
       setLoggingOut(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user?.id) return;
+    if (!deletePassword) {
+      setDeleteError('Please enter your password to confirm.');
+      return;
+    }
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await api.deleteAccount(user.id, deletePassword);
+      // Permanent — log out + send to login screen
+      setShowDeleteModal(false);
+      setDeletePassword('');
+      await logout();
+    } catch (err: any) {
+      setDeleteError(err?.response?.data?.detail || 'Could not delete account. Please try again.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -157,6 +184,89 @@ export default function ProfileScreen() {
           <Text style={[st.disclaimerText, { color: colors.textTertiary }]}>We respect your privacy and do not store personal data. Try recommendations at your own discretion.</Text>
         </View>
 
+        {/* Danger Zone — Delete Account (Apple/Google Play compliance) */}
+        <View style={[st.dangerZone, { borderColor: colors.error + '30', backgroundColor: colors.error + '08' }]}>
+          <View style={st.dangerHeader}>
+            <Ionicons name="warning-outline" size={16} color={colors.error} />
+            <Text style={[st.dangerTitle, { color: colors.error }]}>Danger zone</Text>
+          </View>
+          <Text style={[st.dangerDesc, { color: colors.textSecondary }]}>
+            Permanently delete your MAK account and all your data (analyses, history, feedback). This cannot be undone.
+          </Text>
+          <TouchableOpacity
+            style={[st.dangerBtn, { borderColor: colors.error }]}
+            onPress={() => { setDeletePassword(''); setDeleteError(''); setShowDeleteModal(true); }}
+          >
+            <Ionicons name="trash-outline" size={16} color={colors.error} />
+            <Text style={[st.dangerBtnText, { color: colors.error }]}>Delete My Account</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Delete Account Confirmation Modal */}
+        {showDeleteModal && (
+          <View style={[st.overlay, { backgroundColor: colors.overlay }]}>
+            <View style={[st.modal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={st.modalHeader}>
+                <View style={st.deleteHeader}>
+                  <View style={[st.deleteIconCircle, { backgroundColor: colors.error + '18' }]}>
+                    <Ionicons name="trash" size={20} color={colors.error} />
+                  </View>
+                  <Text style={[st.modalTitle, { color: colors.text }]}>Delete account?</Text>
+                </View>
+                <TouchableOpacity onPress={() => { setShowDeleteModal(false); setDeleteError(''); }}>
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[st.deleteWarning, { color: colors.textSecondary }]}>
+                This will permanently delete your account, all your skin analyses, and any feedback you&apos;ve sent. This action cannot be undone.
+              </Text>
+
+              <Text style={[st.label, { color: colors.textSecondary }]}>
+                Type your password to confirm
+              </Text>
+              <TextInput
+                style={[st.commentInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text, minHeight: 50, fontSize: 15 }]}
+                placeholder="Your password"
+                placeholderTextColor={colors.textTertiary}
+                value={deletePassword}
+                onChangeText={(t) => { setDeletePassword(t); if (deleteError) setDeleteError(''); }}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              {deleteError ? (
+                <View style={[st.deleteErr, { backgroundColor: colors.error + '14' }]}>
+                  <Ionicons name="alert-circle" size={14} color={colors.error} />
+                  <Text style={[st.deleteErrText, { color: colors.error }]}>{deleteError}</Text>
+                </View>
+              ) : null}
+
+              <View style={st.deleteBtnRow}>
+                <TouchableOpacity
+                  style={[st.logoutCancelBtn, { borderColor: colors.border }]}
+                  onPress={() => { setShowDeleteModal(false); setDeleteError(''); }}
+                  disabled={deleting}
+                >
+                  <Text style={[st.logoutCancelText, { color: colors.textSecondary }]}>Keep account</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[st.logoutYesBtn, { backgroundColor: colors.error }]}
+                  onPress={handleDeleteAccount}
+                  disabled={deleting}
+                >
+                  {deleting ? (
+                    <ActivityIndicator color="#FFF" size="small" />
+                  ) : (
+                    <Text style={st.logoutYesText}>Delete forever</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* Feedback Modal */}
         {showFeedback && (
           <View style={[st.overlay, { backgroundColor: colors.overlay }]}>
@@ -229,4 +339,17 @@ const st = StyleSheet.create({
   commentInput: { borderRadius: 12, padding: 14, fontSize: 13, minHeight: 80, borderWidth: 1, marginTop: 4 },
   submitBtn: { borderRadius: 12, padding: 15, alignItems: 'center', marginTop: 16 },
   submitText: { fontSize: 15, fontWeight: '700', color: '#FFF' },
+  // ===== Delete Account / Danger Zone =====
+  dangerZone: { borderRadius: 14, padding: 16, borderWidth: 1, marginTop: 14, marginBottom: 10 },
+  dangerHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  dangerTitle: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
+  dangerDesc: { fontSize: 12, lineHeight: 17, marginBottom: 12 },
+  dangerBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 10, borderWidth: 1 },
+  dangerBtnText: { fontSize: 14, fontWeight: '700' },
+  deleteHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  deleteIconCircle: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  deleteWarning: { fontSize: 13, lineHeight: 19, marginBottom: 16 },
+  deleteBtnRow: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  deleteErr: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 10, borderRadius: 8, marginTop: 10 },
+  deleteErrText: { flex: 1, fontSize: 12, fontWeight: '600' },
 });

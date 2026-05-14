@@ -87,6 +87,102 @@ _load_locations()
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+# ============================================================
+# PASSWORD RESET — Gmail SMTP + secure-token utilities
+# ============================================================
+import smtplib
+import secrets as _secrets
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.utils import formataddr
+
+GMAIL_USER = os.environ.get('GMAIL_USER', '')
+GMAIL_APP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD', '').replace(' ', '')  # strip spaces for safety
+RESET_BASE_URL = os.environ.get('RESET_BASE_URL', 'https://mak-makeup-buddy.preview.emergentagent.com').rstrip('/')
+SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'makstylingbuddy.support@gmail.com')
+SMTP_HOST = 'smtp.gmail.com'
+SMTP_PORT = 587
+
+# Generic message returned for forgot-password — NEVER reveals if email exists (anti-enumeration)
+_NEUTRAL_RESET_MSG = "If that email is registered with MAK, you'll receive a reset link within a minute. Check your inbox (and spam folder)."
+
+# Load HTML email template once at startup
+_EMAIL_TEMPLATE_PATH = ROOT_DIR / 'templates' / 'password_reset_email.html'
+try:
+    with open(_EMAIL_TEMPLATE_PATH, 'r', encoding='utf-8') as _f:
+        _PASSWORD_RESET_HTML_TEMPLATE = _f.read()
+except Exception:
+    _PASSWORD_RESET_HTML_TEMPLATE = None
+
+
+def _generate_reset_token() -> tuple:
+    """Returns (plain_token, sha256_hashed_token). Plain goes in email, hash goes in DB."""
+    plain = _secrets.token_urlsafe(32)  # ~256 bits of entropy
+    hashed = hashlib.sha256(plain.encode()).hexdigest()
+    return plain, hashed
+
+
+def _hash_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _send_reset_email_sync(to_email: str, name: str, reset_url: str) -> None:
+    """Blocking SMTP send — must be called via run_in_executor.
+    Raises on auth/connection failure (caller decides whether to surface)."""
+    if not GMAIL_USER or not GMAIL_APP_PASSWORD:
+        raise RuntimeError("Email service not configured")
+
+    safe_name = (name or 'there').strip() or 'there'
+
+    # Build HTML body from template (with placeholder substitution)
+    if _PASSWORD_RESET_HTML_TEMPLATE:
+        html_body = (_PASSWORD_RESET_HTML_TEMPLATE
+                     .replace('{{name}}', safe_name)
+                     .replace('{{reset_url}}', reset_url)
+                     .replace('{{support_email}}', SUPPORT_EMAIL))
+    else:
+        html_body = f"<html><body><p>Hi {safe_name},</p><p>Reset your password: <a href='{reset_url}'>{reset_url}</a></p><p>This link expires in 30 minutes.</p></body></html>"
+
+    # Plaintext fallback (always include for email clients that prefer it)
+    plain_body = (
+        f"Hi {safe_name},\n\n"
+        "We received a request to reset the password for your MAK account.\n\n"
+        f"Open this link in any browser to choose a new password:\n{reset_url}\n\n"
+        "This link expires in 30 minutes and can only be used once.\n\n"
+        "If you didn't request this, you can safely ignore this email -- your password won't change.\n\n"
+        "-- The MAK Team\n\n"
+        f"Please don't reply to this email. For help, contact: {SUPPORT_EMAIL}\n"
+    )
+
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = "Reset your MAK password"
+    msg['From'] = formataddr(("MAK -- Password Reset", GMAIL_USER))
+    msg['To'] = to_email
+    msg['Reply-To'] = SUPPORT_EMAIL
+    msg.attach(MIMEText(plain_body, 'plain', 'utf-8'))
+    msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+        server.send_message(msg)
+
+
+async def send_password_reset_email(to_email: str, name: str, plain_token: str) -> bool:
+    """Async wrapper. Returns True on success, False on any failure (never raises)."""
+    reset_url = f"{RESET_BASE_URL}/reset?token={plain_token}"
+    try:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _send_reset_email_sync, to_email, name, reset_url)
+        return True
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Failed to send reset email to {to_email}: {e}")
+        return False
+
+
+
 # MongoDB connection with PRODUCTION-READY pooling + auto-reconnect
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 client = AsyncIOMotorClient(
@@ -860,6 +956,175 @@ async def change_password(data: ChangePasswordRequest):
     await db.users.update_one({"id": data.user_id}, {"$set": {"password_hash": new_hash}})
     return {"message": "Password updated successfully."}
 
+
+# ============================================================
+# PASSWORD RESET — Forgot password flow
+# ============================================================
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest):
+    """Initiate password reset. ALWAYS returns 200 with a neutral message
+    so attackers can't enumerate which emails are registered.
+
+    Security:
+      - Cryptographic 256-bit token (secrets.token_urlsafe(32))
+      - Token stored as SHA-256 hash in DB (never plaintext)
+      - 30-min TTL, single-use, auto-cleaned by TTL index
+      - Rate limit: 3 requests per email per hour
+    """
+    import re
+    email = data.email.strip().lower()
+    if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+        # Still neutral — don't reveal the format check
+        return {"status": "ok", "message": _NEUTRAL_RESET_MSG}
+
+    # Rate limit: count requests for THIS email in the last hour
+    one_hour_ago = now_utc() - timedelta(hours=1)
+    try:
+        recent_count = await db.password_reset_tokens.count_documents({
+            "email": email,
+            "requested_at": {"$gte": one_hour_ago},
+        })
+    except Exception:
+        recent_count = 0
+    if recent_count >= 3:
+        logger.warning(f"Rate-limit hit for password-reset email={email[:3]}***")
+        return {"status": "ok", "message": _NEUTRAL_RESET_MSG}
+
+    user = await db.users.find_one({"email": email})
+
+    if not user:
+        # Mask timing: pretend we're hashing/sending so attacker can't time-distinguish
+        await asyncio.sleep(0.45)
+        return {"status": "ok", "message": _NEUTRAL_RESET_MSG}
+
+    # Issue token
+    plain_token, token_hash = _generate_reset_token()
+
+    await db.password_reset_tokens.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "email": email,
+        "token_hash": token_hash,
+        "requested_at": now_utc(),
+        "expires_at": now_utc() + timedelta(minutes=30),
+        "used_at": None,
+    })
+
+    name = user.get("display_name") or "there"
+    # Send asynchronously but await before responding so we know if SMTP errored
+    sent = await send_password_reset_email(email, name, plain_token)
+    if not sent:
+        # Don't reveal failure to caller (always neutral message), but log it.
+        logger.error(f"SMTP send failed for forgot-password (email masked={email[:3]}***)")
+
+    return {"status": "ok", "message": _NEUTRAL_RESET_MSG}
+
+
+@api_router.post("/auth/reset-password")
+async def reset_password(data: ResetPasswordRequest):
+    """Consume reset token + set new password.
+
+    Returns 400 with user-friendly detail on:
+      - Invalid/expired/already-used token
+      - Weak/invalid new password
+    """
+    import re
+    if not data.token or len(data.token) < 10:
+        raise HTTPException(status_code=400, detail="This reset link is invalid. Please request a new one.")
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+    if re.search(r'<[^>]+>|javascript:|<script', data.new_password, re.IGNORECASE):
+        raise HTTPException(status_code=400, detail="Password contains invalid characters.")
+
+    token_hash = _hash_reset_token(data.token)
+    record = await db.password_reset_tokens.find_one({"token_hash": token_hash})
+
+    if not record:
+        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired. Please request a new one.")
+
+    if record.get("used_at"):
+        raise HTTPException(status_code=400, detail="This reset link has already been used. Please request a new one.")
+
+    expires_at = record.get("expires_at")
+    if expires_at is not None:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < now_utc():
+            raise HTTPException(status_code=400, detail="This reset link has expired. Please request a new one.")
+
+    user = await db.users.find_one({"id": record["user_id"]})
+    if not user:
+        raise HTTPException(status_code=400, detail="This reset link is no longer valid. Please request a new one.")
+
+    new_hash = hash_password(data.new_password)
+    await db.users.update_one({"id": record["user_id"]}, {"$set": {"password_hash": new_hash}})
+
+    # Mark token consumed (don't delete — keep audit trail until TTL clean-up)
+    await db.password_reset_tokens.update_one(
+        {"_id": record["_id"]},
+        {"$set": {"used_at": now_utc()}}
+    )
+
+    # Also invalidate any OTHER outstanding reset tokens for this user (defense-in-depth)
+    await db.password_reset_tokens.update_many(
+        {"user_id": record["user_id"], "used_at": None, "_id": {"$ne": record["_id"]}},
+        {"$set": {"used_at": now_utc()}}
+    )
+
+    return {"status": "ok", "message": "Password updated successfully. You can now sign in with your new password."}
+
+
+# ============================================================
+# ACCOUNT DELETION (Apple App Store + Google Play compliance)
+# Permanent removal of user + ALL personally identifiable data.
+# ============================================================
+class DeleteAccountRequest(BaseModel):
+    user_id: str
+    password: str
+
+
+@api_router.post("/auth/delete-account")
+async def delete_account(data: DeleteAccountRequest):
+    """Permanently delete the user account and all associated data.
+    Requires password re-entry to prevent account hijack via stolen session.
+    Required by Apple App Store Guideline 5.1.1(v) and Google Play."""
+    user = await db.users.find_one({"id": data.user_id})
+    if not user:
+        # Don't reveal anything specific
+        raise HTTPException(status_code=400, detail="Account not found or password incorrect.")
+
+    stored_hash = user.get("password_hash")
+    if not stored_hash or not verify_password(data.password, stored_hash):
+        raise HTTPException(status_code=400, detail="Account not found or password incorrect.")
+
+    uid = user["id"]
+    # Order: dependent records first, then the user
+    try:
+        await db.password_reset_tokens.delete_many({"user_id": uid})
+        a = await db.analyses.delete_many({"user_id": uid})
+        f = await db.feedback.delete_many({"user_id": uid})
+        await db.notify_list.delete_many({"user_id": uid}) if hasattr(db, 'notify_list') else None
+        await db.users.delete_one({"id": uid})
+        logger.info(f"Account deleted user_id={uid[:8]}*** analyses={a.deleted_count} feedback={f.deleted_count}")
+    except Exception as e:
+        logger.error(f"Account deletion failed for user {uid[:8]}***: {e}")
+        raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
+
+    return {
+        "status": "ok",
+        "message": "Your account and all associated data have been permanently deleted."
+    }
+
+
 @api_router.post("/auth/guest-login", response_model=UserResponse)
 async def guest_login():
     """Create a guest user without email or phone"""
@@ -1484,6 +1749,19 @@ async def startup_event():
         # Analysis cache: unique index on image_hash for fast lookups
         await asyncio.wait_for(
             db.analysis_cache.create_index("image_hash", unique=True),
+            timeout=5
+        )
+        # Password reset tokens: unique hash, fast email-rate-lookup, auto-expire 24h after issue
+        await asyncio.wait_for(
+            db.password_reset_tokens.create_index("token_hash", unique=True),
+            timeout=5
+        )
+        await asyncio.wait_for(
+            db.password_reset_tokens.create_index([("email", 1), ("requested_at", -1)]),
+            timeout=5
+        )
+        await asyncio.wait_for(
+            db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=86400),
             timeout=5
         )
         logger.info("MongoDB indexes ensured")

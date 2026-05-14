@@ -205,6 +205,29 @@ export const api = {
     return response.data;
   },
 
+  // Forgot Password — sends a reset link to the user's email.
+  // ALWAYS resolves with a neutral message (200) regardless of whether
+  // the email is registered, to prevent account-enumeration attacks.
+  forgotPassword: async (email: string): Promise<{ status: string; message: string }> => {
+    const response = await apiClient.post('/auth/forgot-password', { email }, { timeout: 20000 });
+    return response.data;
+  },
+
+  // Reset Password — consumes a token and sets a new password.
+  // Throws on invalid/expired/used token (400) or weak password (400).
+  resetPassword: async (token: string, newPassword: string): Promise<{ status: string; message: string }> => {
+    const response = await apiClient.post('/auth/reset-password', { token, new_password: newPassword }, { timeout: 15000 });
+    return response.data;
+  },
+
+  // Delete Account — permanently removes user + all data.
+  // Requires password re-entry to prevent session-takeover deletion.
+  // Required by Apple App Store guidelines + Google Play.
+  deleteAccount: async (userId: string, password: string): Promise<{ status: string; message: string }> => {
+    const response = await apiClient.post('/auth/delete-account', { user_id: userId, password }, { timeout: 15000 });
+    return response.data;
+  },
+
   // Get Profile
   getProfile: async (userId: string) => {
     const response = await apiClient.get(`/auth/profile/${userId}`);
