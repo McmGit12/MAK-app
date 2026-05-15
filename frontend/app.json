@@ -14,7 +14,8 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "Take selfies for personalized skin analysis",
-        "NSPhotoLibraryUsageDescription": "Select photos for skin analysis"
+        "NSPhotoLibraryUsageDescription": "Select photos for skin analysis",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
