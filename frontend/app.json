@@ -12,6 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.mak.makeupbuddy",
       "buildNumber": "1",
+      "newArchEnabled": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Take selfies for personalized skin analysis",
         "NSPhotoLibraryUsageDescription": "Select photos for skin analysis",
@@ -21,6 +22,7 @@
     "android": {
       "package": "com.mak.makeupbuddy",
       "versionCode": 112,
+      "newArchEnabled": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#FFF8F5"
