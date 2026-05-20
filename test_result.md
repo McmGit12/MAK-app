@@ -2387,3 +2387,91 @@ agent_communication:
 
       Browser-automation budget: 2 invocations used (within 3-call limit).
 
+
+
+# ============================================================
+# v1.0.13 — P0 BUG FIX (iOS "Choose from Gallery" unresponsive)
+# ============================================================
+
+frontend:
+  - task: "iOS image picker (Choose from Gallery) fix"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(tabs)/analyze.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            ROOT CAUSE (iOS only, regressed by New Architecture / Fabric switch in v1.0.12):
+              1) expo-image-picker@17.0.11 DEPRECATED `ImagePicker.MediaTypeOptions.Images`. Under the New
+                 Architecture (Fabric), the constant resolves to `undefined`, causing
+                 `launchImageLibraryAsync` to silently no-op on iPhone (button appears unresponsive).
+                 FIX: switched to the new string-array API `mediaTypes: ['images']`.
+              2) iOS 14+ requires `requestMediaLibraryPermissionsAsync()` to be called BEFORE launching
+                 the picker. The previous code skipped this — on iOS the picker silently does nothing
+                 if permission has not been granted. FIX: explicit permission request with a user-friendly
+                 Settings deep-link suggestion if denied.
+              3) iOS Modal-dismissal race condition: when the upload bottom-sheet Modal is dismissed and
+                 the picker is mounted in the same JS tick, iOS occasionally swallows the picker presentation.
+                 FIX: 350ms setTimeout between Modal close and picker mount (applies to both
+                 Take Photo and Choose from Gallery paths).
+            Also bumped app.json:
+              - version 1.0.12 → 1.0.13
+              - ios.buildNumber "1" → "2"
+              - android.versionCode 112 → 113
+
+  - task: "Full iPhone E2E regression after Fabric / New Architecture switch"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(tabs)/*"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            User-reported P0: "Choose from gallery doesn't work at all on iPhone."
+            Request: re-test ALL critical flows end-to-end on iPhone-sized viewport (390x844)
+            to ensure the Fabric switch in v1.0.12 didn't silently break other interactions.
+            Critical paths to verify:
+              - Login / Signup
+              - Skin Care analysis: Take Photo + Choose from Gallery → Analyze → Results
+              - Makeup analysis: Take Photo + Choose from Gallery → Analyze → Results
+              - Travel Styling: Country/State/City picker → Month/Occasion → Suggestions
+              - History tab
+              - Profile tab + Account Settings + Delete Account modal
+              - Ask MAK chatbot floating button
+              - Forgot Password sheet
+              - Logout
+
+metadata:
+  test_sequence: bump (v1.0.13)
+
+test_plan:
+  current_focus:
+    - "iOS image picker (Choose from Gallery) fix"
+    - "Full iPhone E2E regression after Fabric / New Architecture switch"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      v1.0.13 P0 HOTFIX: User reported iPhone "Choose from Gallery" is completely unresponsive on
+      the IPA build (Closed Beta). Investigated and found three combined causes:
+        (a) Deprecated `ImagePicker.MediaTypeOptions.Images` resolving to undefined under New Architecture
+        (b) Missing explicit `requestMediaLibraryPermissionsAsync()` call (required since iOS 14)
+        (c) iOS Modal-dismissal race condition
+      All three are now fixed in /app/frontend/app/(tabs)/analyze.tsx.
+      Versions bumped (1.0.13 / iOS build 2 / android versionCode 113).
+      REQUEST: please run full iPhone-sized regression (390x844). Pay extra attention to:
+        - Tapping "Choose from Gallery" on every analysis mode (skin care, makeup) actually opens
+          the OS photo picker (web equivalent: file input fires).
+        - "Take Photo" still opens the camera view.
+        - All other flows (login, travel styling, history, profile, chatbot, delete-account,
+          forgot-password) still work normally after the Fabric architecture switch.

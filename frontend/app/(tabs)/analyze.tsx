@@ -184,13 +184,52 @@ export default function AnalyzeScreen() {
 
   const pickImage = async () => {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.8, base64: true });
-      if (!result.canceled && result.assets[0]) { setImageUri(result.assets[0].uri); if (result.assets[0].base64) setImageBase64(result.assets[0].base64); }
-    } catch (err) { Alert.alert('Error', 'Failed to select image'); }
+      // 1) iOS 14+ REQUIRES explicit media-library permission BEFORE launching the picker
+      //    Without this, the picker is silently unresponsive on iPhone (P0 blocker).
+      const perm = await ImagePicker.getMediaLibraryPermissionsAsync();
+      let status = perm.status;
+      if (status !== 'granted') {
+        const req = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        status = req.status;
+      }
+      if (status !== 'granted') {
+        Alert.alert(
+          'Photos Access Needed',
+          'MAK needs access to your photos to analyze your selfie. You can enable this in Settings > MAK > Photos.',
+        );
+        return;
+      }
+
+      // 2) IMPORTANT: expo-image-picker v17+ deprecated `MediaTypeOptions.Images`.
+      //    On iOS New Architecture (Fabric) the constant resolves to `undefined`
+      //    causing the picker to silently no-op. Use the string-array API.
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setImageUri(result.assets[0].uri);
+        if (result.assets[0].base64) setImageBase64(result.assets[0].base64);
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
   };
 
   const takePhoto = async () => {
-    if (!permission?.granted) { const r = await requestPermission(); if (!r.granted) { Alert.alert('Permission Required', 'Camera access needed.'); return; } }
+    if (!permission?.granted) {
+      const r = await requestPermission();
+      if (!r.granted) {
+        Alert.alert(
+          'Camera Access Needed',
+          'MAK needs camera access to take your selfie. You can enable this in Settings > MAK > Camera.',
+        );
+        return;
+      }
+    }
     setCameraMode(true);
   };
 
@@ -517,7 +556,7 @@ export default function AnalyzeScreen() {
             </View>
             <TouchableOpacity
               style={[s.uploadOption, { backgroundColor: colors.surfaceVariant, borderColor: colors.borderLight }]}
-              onPress={() => { setShowUploadSheet(false); takePhoto(); }}
+              onPress={() => { setShowUploadSheet(false); setTimeout(() => takePhoto(), 350); }}
               activeOpacity={0.85}
             >
               <View style={[s.uploadOptionIcon, { backgroundColor: colors.primaryLight }]}>
@@ -531,7 +570,7 @@ export default function AnalyzeScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.uploadOption, { backgroundColor: colors.surfaceVariant, borderColor: colors.borderLight }]}
-              onPress={() => { setShowUploadSheet(false); pickImage(); }}
+              onPress={() => { setShowUploadSheet(false); setTimeout(() => pickImage(), 350); }}
               activeOpacity={0.85}
             >
               <View style={[s.uploadOptionIcon, { backgroundColor: colors.secondaryLight }]}>
