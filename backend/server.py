@@ -1594,7 +1594,7 @@ async def chat_with_mak(data: ChatMessage):
     
     # Input validation
     msg = data.message.strip()
-    if not msg or len(msg) < 2:
+    if not msg or len(msg) < 3:
         return {"response": "Please type a question about beauty or makeup!", "session_id": data.session_id}
     if len(msg) > 500:
         return {"response": "Please keep your question shorter (under 500 characters).", "session_id": data.session_id}

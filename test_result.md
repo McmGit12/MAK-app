@@ -2653,3 +2653,115 @@ agent_communication:
       Zero regressions. The credit-saving harness IS working as designed. Main agent MAY (optional) tighten
       thresholds to `len<3` and run-on `>20` to literally match spec wording, but this is non-blocking.
       v1.0.14 backend is DEPLOYMENT-READY.
+
+---
+
+## v1.0.14 Full E2E Regression (Android + iOS viewports) — Testing Agent Report
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      v1.0.14 FULL E2E REGRESSION COMPLETE. Used 2 of 3 browser-automation invocations within budget.
+      Viewports tested: iPhone 14/15 (390x844), Galaxy/Pixel (360x800), iPhone SE (320x568).
+
+      🔴 P0 — LOGIN FLOW (8/8 PASS at 390x844):
+        ✅ 1. Welcome to MAK renders (logo, title, email input, Continue button, Terms/Privacy)
+        ✅ 2. Empty email -> Continue -> inline error "Please enter your email" shown
+        ✅ 3. Invalid email "notanemail" -> Continue -> inline error "valid email address" shown
+        ✅ 4. New email "newuser_v14_2026@example.com" -> Continue -> "Create your account" screen with Full Name + Password + Confirm fields
+        ✅ 5. Back -> email step -> "test@mak.com" -> Continue -> "Welcome back!" sign-in screen
+        ✅ 6. Wrong password "wrongpass99" -> Sign In -> "Incorrect password" error shown
+        ✅ 7. Forgot password? -> bottom sheet "Reset your password" opens, prefilled with "test@mak.com" (screenshot confirms)
+        ✅ 8. Close sheet -> correct password "test123456" -> Sign In -> Home tab loaded with greeting + stats + skin profile
+
+      🟠 P1 — FIX VERIFICATION:
+
+      Analyze tab clear-image fix (Fix 1):
+        ✅ CODE REVIEW VERIFIED — /app/frontend/app/(tabs)/analyze.tsx lines 256-262: setImageUri(null); setImageBase64(null); called BEFORE router.push('/analysis-result'). When user navigates back from result, Analyze tab will show fresh empty upload card. (Cannot E2E click image-picker on RN-web — known automation limitation noted in v1.0.1+ runs.)
+        ✅ Analyze tab loads, all 3 modes visible (Skin Care / Makeup / Travel Style)
+        ✅ First-scan info banner visible at 390x844 and 360x800
+
+      Ask MAK chatbot harness (Fix 2) — ALL 5/5 PASS at 390x844:
+        ✅ 14. "Hi" (2 chars) -> LOCAL tip "Please type a bit more so I can help! ✨" — NO network call to /api/chat
+        ✅ 15. "1234567890!@#$%" -> LOCAL tip "I didn't quite catch that — try asking me something about skincare, makeup, or styling! ✨"
+        ✅ 16. "aaaaaaaaaa" -> LOCAL tip "Hmm, I'm not sure what you mean. Try a real question like 'best moisturizer for oily skin' 💕"
+        ✅ 20. "fucking shit" -> LOCAL tip "Let's keep our conversation positive and beauty-focused! How can I help with your beauty routine?"
+        ✅ 18. "What's a good moisturizer for oily skin?" -> REAL backend response (verified /api/chat network call captured AND response received with relevant skincare content; no "trouble responding" fallback)
+
+      🟢 P3 — VISUAL / FABRIC REGRESSION:
+        ✅ 360x800 horizontal overflow: 0px (no horizontal scroll)
+        ✅ 320x568 (iPhone SE) login renders cleanly, horizontal overflow: 0px
+        ✅ Bottom tab bar positioned correctly with safe-area inset
+        ✅ Ask MAK FAB does NOT overlap tab bar (bottom = tabBarHeight + 16)
+        ✅ Forgot Password bottom sheet animates in cleanly without flicker
+        ✅ No console errors mentioning RNGestureHandler / RNReanimated / MediaTypeOptions / undefined / unhandled rejection (only standard expected noise: shadow* + pointerEvents deprecations)
+
+      🟡 P2 — REGRESSION (code-reviewed, not all E2E-clicked due to budget):
+        ✅ Login + Home tab loads correctly with greeting, Start Skin Analysis card, stats (18 Analyses / 66 Days / 1 Profile), Skin Profile (Combination/Medium/Neutral/Oval), Trending Now
+        ✅ Travel Style: Country/State/City/Month/Occasion pickers verified in prior v1.0.2 run (no code changes since)
+        ✅ History tab navigation: verified in prior runs
+        ✅ Profile tab + Edit Profile + Logout + Delete Account modal: verified in prior runs (no changes since)
+        ✅ Terms/Privacy footer links: verified in prior runs
+
+      AUTOMATION LIMITATIONS (not defects — same known issues from v1.0.1+):
+        - RN-web custom Pressable picker buttons (image picker Take Photo/Gallery) cannot be reliably clicked via Playwright
+        - Therefore: analyze image-upload -> AI -> result page -> Back -> verify empty upload card was code-reviewed not E2E-clicked
+        - Recommend main agent does a quick manual Expo Go smoke for the analyze clear-image flow before .aab build
+
+      CONCLUSION: All P0 (login) and P1 fix verifications PASS at 390x844. No new regressions detected. App is DEPLOYMENT-READY for v1.0.14.
+
+frontend:
+  - task: "v1.0.14 — Analyze tab clears image after submission (Fix 1)"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/(tabs)/analyze.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Code review at lines 256-262 confirms setImageUri(null) + setImageBase64(null) called BEFORE router.push('/analysis-result'). Analyze tab loads correctly with 3 modes visible at 390x844 and 360x800. Cannot E2E click image picker on RN-web (known automation limitation) but logic is correct."
+
+  - task: "v1.0.14 — AskMakChatbot client-side harness (Fix 2)"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/AskMakChatbot.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ALL 5/5 chat-harness scenarios E2E VERIFIED at 390x844:
+            (1) "Hi" (2 chars) -> local tip "Please type a bit more so I can help! ✨" — NO /api/chat network call
+            (2) "1234567890!@#$%" -> local tip "I didn't quite catch that..."
+            (3) "aaaaaaaaaa" -> local tip "Hmm, I'm not sure what you mean..."
+            (4) "fucking shit" -> local tip "Let's keep our conversation positive and beauty-focused!"
+            (5) "What's a good moisturizer for oily skin?" -> REAL backend response (network call to /api/chat captured, valid skincare answer rendered, no fallback)
+          Screenshot confirms all 4 local tips rendered correctly in sequence with proper conversation flow. validateChatInput() in lines 76-116 protects credits from gibberish/profanity/keysmash without ever calling backend.
+
+  - task: "v1.0.14 — P0 Login Flow Full Regression"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/index.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          8/8 PASS at 390x844 (iPhone 14/15):
+            ✅ Welcome to MAK renders (logo, email input, Continue, Terms/Privacy footer)
+            ✅ Empty email -> "Please enter your email" inline error
+            ✅ "notanemail" -> "Please enter a valid email address" inline error
+            ✅ New email -> "Create your account" screen with Full Name + Password + Confirm fields
+            ✅ Back -> email step -> "test@mak.com" -> "Welcome back!" sign-in screen
+            ✅ Wrong password "wrongpass99" -> "Incorrect password" error
+            ✅ Forgot password? -> bottom sheet "Reset your password" opens with pre-filled "test@mak.com"
+            ✅ Correct password "test123456" -> Home with greeting + stats + skin profile
+
+          Also rendered cleanly at 320x568 (iPhone SE) with 0px horizontal overflow.
+
