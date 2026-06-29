@@ -1615,6 +1615,36 @@ async def chat_with_mak(data: ChatMessage):
     if any(w in msg_lower for w in bad_words):
         return {"response": "Let's keep our conversation positive and beauty-focused! How can I help with your beauty routine?", "session_id": data.session_id}
     
+    # ============================================================
+    # CREDIT-SAVING HARNESS — Reject obvious nonsense/random input
+    # BEFORE we spend an Emergent LLM credit. The LLM system prompt
+    # already handles off-topic redirection, but we never pay for it
+    # if the message is structurally garbage (random keysmashes,
+    # symbol-only strings, repeated characters, etc.).
+    # ============================================================
+    msg_clean = msg.lower()
+    msg_no_space = re.sub(r'\s+', '', msg_clean)
+    if msg_no_space:
+        # 1) Letter-to-total ratio must be sane (block "1234!@#$%" etc.)
+        alpha_chars = re.findall(r'[a-z]', msg_no_space)
+        alpha_ratio = len(alpha_chars) / len(msg_no_space)
+        if alpha_ratio < 0.4:
+            return {"response": "I didn't quite catch that — try asking me something about skincare, makeup, or styling! \u2728", "session_id": data.session_id, "ai_status": "filtered"}
+        
+        # 2) Single character spammed (e.g. "aaaaaaaaaaa", "....")
+        if len(set(msg_no_space)) <= 2 and len(msg_no_space) > 4:
+            return {"response": "Hmm, I'm not sure what you mean. Try a real question like 'best moisturizer for oily skin' \U0001F495", "session_id": data.session_id, "ai_status": "filtered"}
+        
+        # 3) Long unbroken keysmash (no spaces, no vowels) — classic gibberish
+        vowels = set('aeiou')
+        has_vowel = any(c in vowels for c in msg_no_space)
+        if not has_vowel and len(msg_no_space) >= 4:
+            return {"response": "I didn't quite catch that — try asking me something about skincare, makeup, or styling! \u2728", "session_id": data.session_id, "ai_status": "filtered"}
+        
+        # 4) Very long single 'word' (>25 chars, no spaces) — usually random
+        if len(msg_clean) > 25 and ' ' not in msg_clean:
+            return {"response": "That looks like random text. Want help with your beauty routine instead? \U0001F495", "session_id": data.session_id, "ai_status": "filtered"}
+    
     try:
         session_id = data.session_id or str(uuid.uuid4())
         

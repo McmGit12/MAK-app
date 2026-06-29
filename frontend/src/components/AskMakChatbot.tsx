@@ -67,9 +67,69 @@ export default function AskMakChatbot({ tabBarHeight = 70 }: { tabBarHeight?: nu
     }
   };
 
+  // ============================================================
+  // CLIENT-SIDE INPUT HARNESS — guards before we hit the backend / LLM
+  // (Backend has the same checks; doing it here too saves a network
+  // roundtrip + protects against credit waste from accidental key-smashes.)
+  // Returns either {ok:true} or {ok:false, hint:"..."} with a friendly tip.
+  // ============================================================
+  const validateChatInput = (raw: string): { ok: true } | { ok: false; hint: string } => {
+    const text = raw.trim();
+    if (text.length < 3) {
+      return { ok: false, hint: "Please type a bit more so I can help! \u2728" };
+    }
+    if (text.length > 500) {
+      return { ok: false, hint: "Please keep your question under 500 characters." };
+    }
+    // Block scripts / HTML-ish content
+    if (/<[^>]+>|javascript:|<script|onclick|onerror/i.test(text)) {
+      return { ok: false, hint: "Please ask a valid beauty or makeup question." };
+    }
+    const lower = text.toLowerCase();
+    const noSpace = lower.replace(/\s+/g, '');
+    if (!noSpace) return { ok: false, hint: "Please type a real question \uD83D\uDC95" };
+
+    // Letter-to-total ratio — block things like "1234!@#$%"
+    const alphaCount = (noSpace.match(/[a-z]/g) || []).length;
+    if (alphaCount / noSpace.length < 0.4) {
+      return { ok: false, hint: "I didn't quite catch that \u2014 try asking me something about skincare, makeup, or styling! \u2728" };
+    }
+    // Single character spammed ("aaaaaaaa", "....")
+    if (new Set(noSpace).size <= 2 && noSpace.length > 4) {
+      return { ok: false, hint: "Hmm, I'm not sure what you mean. Try a real question like 'best moisturizer for oily skin' \uD83D\uDC95" };
+    }
+    // Long unbroken keysmash without vowels
+    const hasVowel = /[aeiou]/.test(noSpace);
+    if (!hasVowel && noSpace.length >= 4) {
+      return { ok: false, hint: "I didn't quite catch that \u2014 try asking me something about skincare, makeup, or styling! \u2728" };
+    }
+    // Very long single 'word' (no spaces) — usually random
+    if (lower.length > 25 && !/\s/.test(lower)) {
+      return { ok: false, hint: "That looks like random text. Want help with your beauty routine instead? \uD83D\uDC95" };
+    }
+    // Block cuss words (basic mirror of backend list)
+    const badWords = ['fuck', 'shit', 'damn', 'bitch', 'bastard', 'dick', 'cunt', 'wtf', 'stfu', 'lmao'];
+    if (badWords.some(w => lower.includes(w))) {
+      return { ok: false, hint: "Let's keep our conversation positive and beauty-focused! How can I help with your beauty routine?" };
+    }
+    return { ok: true };
+  };
+
   const sendMessage = async () => {
     const text = input.trim();
     if (!text || sending) return;
+
+    // Run harness BEFORE adding the message or making the API call.
+    // If invalid, just append a friendly bot tip locally (zero LLM cost).
+    const check = validateChatInput(text);
+    if (!check.ok) {
+      const userMsg: Message = { id: Date.now().toString(), text, isUser: true, timestamp: new Date() };
+      const tipMsg: Message = { id: (Date.now() + 1).toString(), text: check.hint, isUser: false, timestamp: new Date() };
+      setMessages(prev => [...prev, userMsg, tipMsg]);
+      setInput('');
+      Keyboard.dismiss();
+      return;
+    }
 
     const userMsg: Message = { id: Date.now().toString(), text, isUser: true, timestamp: new Date() };
     setMessages(prev => [...prev, userMsg]);

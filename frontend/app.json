@@ -2,7 +2,7 @@
   "expo": {
     "name": "MAK",
     "slug": "mak-makeup-buddy",
-    "version": "1.0.13",
+    "version": "1.0.14",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mak",
@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mak.makeupbuddy",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "infoPlist": {
         "NSCameraUsageDescription": "Take selfies for personalized skin analysis",
         "NSPhotoLibraryUsageDescription": "Select photos for skin analysis",
@@ -20,7 +20,7 @@
     },
     "android": {
       "package": "com.mak.makeupbuddy",
-      "versionCode": 113,
+      "versionCode": 114,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#FFF8F5"

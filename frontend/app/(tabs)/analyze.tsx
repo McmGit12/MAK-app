@@ -253,6 +253,12 @@ export default function AnalyzeScreen() {
     setErrorVariant(null);
     try {
       const result = await api.analyzeSkin(imageBase64, user.id, mode);
+      // UX FIX: Clear the captured image state BEFORE navigating to results so when
+      // the user taps "Back" from the result screen, they land on a fresh canvas
+      // ready to take/upload another photo (instead of seeing the previous photo
+      // and being confused about what to do next).
+      setImageUri(null);
+      setImageBase64(null);
       router.push({ pathname: '/analysis-result', params: { analysisId: result.id, mode } });
     } catch (err: any) {
       // Map error to a user-friendly variant — never expose status codes

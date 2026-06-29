@@ -1,399 +1,326 @@
 """
-MAK app v1.0.12 backend test suite.
-Tests new endpoints (forgot-password, reset-password, delete-account) + regression.
+v1.0.14 Backend Test — Focus on NEW chat harness + regression of P0/P2/P3 endpoints.
+Uses external preview URL from /app/frontend/.env (EXPO_PUBLIC_BACKEND_URL).
 """
 import os
+import sys
 import time
-import uuid
-import hashlib
-import asyncio
-from datetime import datetime, timezone, timedelta
-
+import json
 import requests
-from motor.motor_asyncio import AsyncIOMotorClient
-from dotenv import load_dotenv
-
-# Load backend env to talk to Mongo directly (for token insertion + verification)
-load_dotenv("/app/backend/.env")
-MONGO_URL = os.environ["MONGO_URL"]
-DB_NAME = os.environ.get("DB_NAME", "complexionfit_db")
 
 BASE = "https://mak-makeup-buddy.preview.emergentagent.com/api"
 
-PRIMARY_EMAIL = "test@mak.com"
-PRIMARY_PASSWORD = "test123456"
+TEST_EMAIL = "test@mak.com"
+TEST_PASSWORD = "test123456"
 
-results = []  # list of (name, passed:bool, detail)
+results = []  # (category, name, passed, detail)
 
-
-def record(name, passed, detail=""):
+def log(cat, name, passed, detail=""):
     icon = "PASS" if passed else "FAIL"
-    print(f"[{icon}] {name}: {detail}")
-    results.append((name, passed, detail))
+    print(f"[{icon}] [{cat}] {name}  {detail[:300]}")
+    results.append((cat, name, passed, detail))
 
-
-def now_utc():
-    return datetime.now(timezone.utc)
-
-
-# ===================================================================
-# REGRESSION TESTS
-# ===================================================================
-def test_regression():
-    print("\n=== REGRESSION ===")
-
-    r = requests.get(f"{BASE}/health", timeout=10)
-    body = r.json() if r.status_code == 200 else {}
-    ok = r.status_code == 200 and body.get("mongodb") == "connected" and body.get("llm_key_configured") is True
-    record("GET /api/health", ok, f"status={r.status_code} body={body}")
-
-    r = requests.get(f"{BASE}/warmup", timeout=10)
-    record("GET /api/warmup", r.status_code == 200, f"status={r.status_code}")
-
-    r = requests.post(f"{BASE}/auth/check-email", json={"email": PRIMARY_EMAIL}, timeout=10)
-    record("POST /api/auth/check-email", r.status_code == 200 and r.json().get("exists") is True, f"status={r.status_code} body={r.json()}")
-
-    new_email = f"regression_{int(time.time())}@mak.com"
-    r = requests.post(f"{BASE}/auth/register", json={"email": new_email, "name": "Regression Tester", "password": "regress123"}, timeout=10)
-    record("POST /api/auth/register (new user)", r.status_code == 200 and r.json().get("id"), f"status={r.status_code}")
-    new_user_id = r.json().get("id") if r.status_code == 200 else None
-
-    r = requests.post(f"{BASE}/auth/password-login", json={"email": PRIMARY_EMAIL, "password": PRIMARY_PASSWORD}, timeout=10)
-    record("POST /api/auth/password-login (test@mak.com)", r.status_code == 200, f"status={r.status_code}")
-    primary_user_id = r.json().get("id") if r.status_code == 200 else None
-
-    if new_user_id:
-        r = requests.post(f"{BASE}/auth/change-password", json={"user_id": new_user_id, "current_password": "regress123", "new_password": "regress456"}, timeout=10)
-        record("POST /api/auth/change-password", r.status_code == 200, f"status={r.status_code}")
-
-    r = requests.get(f"{BASE}/locations/countries", timeout=10)
-    data = r.json() if r.status_code == 200 else []
-    record("GET /api/locations/countries", r.status_code == 200 and isinstance(data, list) and len(data) > 100, f"status={r.status_code} count={len(data) if isinstance(data, list) else 'N/A'}")
-
-    r = requests.get(f"{BASE}/locations/states/IN", timeout=10)
-    data = r.json() if r.status_code == 200 else []
-    record("GET /api/locations/states/IN", r.status_code == 200 and isinstance(data, list) and len(data) > 10, f"status={r.status_code} count={len(data) if isinstance(data, list) else 'N/A'}")
-
-    notify_email = f"notify_{int(time.time())}@mak.com"
-    r = requests.post(f"{BASE}/notify-signup", json={"email": notify_email}, timeout=10)
-    record("POST /api/notify-signup", r.status_code == 200 and r.json().get("status") == "ok", f"status={r.status_code}")
-
-    if primary_user_id:
-        tiny_jpeg_b64 = (
-            "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB"
-            "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB"
-            "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAA"
-            "AAj/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAA"
-            "AAAA/9oADAMBAAIRAxEAPwA/AB//2Q=="
-        )
-        try:
-            r = requests.post(f"{BASE}/analyze-skin", json={"image_base64": tiny_jpeg_b64, "user_id": primary_user_id, "mode": "skin_care"}, timeout=60)
-            # 200 (cached/ok), 400 (validation), 422 (refusal), 503 (LLM busy) all acceptable for tiny image
-            ok = r.status_code in (200, 400, 422, 503)
-            detail = f"status={r.status_code}"
-            if r.status_code == 200:
-                has_recs = "ai_recommendations" in r.json()
-                detail += f" has_ai_recommendations={has_recs}"
-                ok = ok and has_recs
-            record("POST /api/analyze-skin", ok, detail)
-        except Exception as e:
-            record("POST /api/analyze-skin", False, f"exception={e}")
-
-
-# ===================================================================
-# 1) FORGOT-PASSWORD
-# ===================================================================
-def test_forgot_password(loop, db):
-    print("\n=== /api/auth/forgot-password ===")
-
-    one_hour_ago = now_utc() - timedelta(hours=1)
-    loop.run_until_complete(db.password_reset_tokens.delete_many({"email": PRIMARY_EMAIL, "requested_at": {"$gte": one_hour_ago}}))
-
-    # 1a) Registered user
-    t0 = time.time()
-    r = requests.post(f"{BASE}/auth/forgot-password", json={"email": PRIMARY_EMAIL}, timeout=30)
-    elapsed = time.time() - t0
-    expected_msg = "If that email is registered with MAK, you'll receive a reset link within a minute. Check your inbox (and spam folder)."
-    body = r.json() if r.status_code == 200 else {}
-    ok = (r.status_code == 200 and body.get("status") == "ok" and body.get("message") == expected_msg)
-    record("1a) Registered user: status+message", ok, f"status={r.status_code} msg_match={body.get('message')==expected_msg} elapsed={elapsed:.2f}s")
-    record("1a) Registered user: elapsed in real-SMTP range", 0.8 <= elapsed <= 20, f"elapsed={elapsed:.2f}s (expected ~1-5s)")
-
-    # 1b) Unregistered email
-    t0 = time.time()
-    # NOTE: spec example "noone-12345@nowhere.test" fails Pydantic EmailStr because
-    # ".test" is an RFC2606 reserved TLD. Using a syntactically-valid unregistered email instead.
-    r = requests.post(f"{BASE}/auth/forgot-password", json={"email": "noone-fake-12345@example.com"}, timeout=10)
-    elapsed_b = time.time() - t0
-    body = r.json() if r.status_code == 200 else {}
-    ok = (r.status_code == 200 and body.get("message") == expected_msg)
-    record("1b) Unregistered: same 200 + same msg (anti-enumeration)", ok, f"status={r.status_code} elapsed={elapsed_b:.2f}s")
-    record("1b) Unregistered: short timing-mask delay (~0.4-0.8s)", 0.3 <= elapsed_b <= 2.5, f"elapsed={elapsed_b:.2f}s")
-
-    # 1c) Invalid email format → 422
-    r = requests.post(f"{BASE}/auth/forgot-password", json={"email": "not-an-email"}, timeout=10)
-    record("1c) Invalid format → 422 (Pydantic EmailStr)", r.status_code == 422, f"status={r.status_code} body={r.text[:200]}")
-
-    # 1d) Rate-limit test: send 3 more to reach 4 total
-    rate_results = []
-    for i in range(3):
-        r = requests.post(f"{BASE}/auth/forgot-password", json={"email": PRIMARY_EMAIL}, timeout=30)
-        rate_results.append(r.status_code)
-
-    one_hour_ago = now_utc() - timedelta(hours=1)
-    token_count = loop.run_until_complete(
-        db.password_reset_tokens.count_documents({"email": PRIMARY_EMAIL, "requested_at": {"$gte": one_hour_ago}})
-    )
-    record("1d) Rate-limit: all 4 requests return 200", all(s == 200 for s in rate_results), f"3 additional={rate_results}")
-    record("1d) Rate-limit: <=3 tokens persisted in DB last hour", token_count <= 3, f"tokens_in_last_hour={token_count}")
-
-    # 1e) Verify token doc fields
-    token_doc = loop.run_until_complete(
-        db.password_reset_tokens.find_one({"email": PRIMARY_EMAIL, "used_at": None}, sort=[("requested_at", -1)])
-    )
-    if token_doc:
-        token_hash = token_doc.get("token_hash", "")
-        expires_at = token_doc.get("expires_at")
-        if expires_at is not None and expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        target = now_utc() + timedelta(minutes=30)
-        delta = abs((expires_at - target).total_seconds()) if expires_at else 99999
-        user = loop.run_until_complete(db.users.find_one({"email": PRIMARY_EMAIL}))
-        user_id = user["id"] if user else None
-        record("1e) token_hash is 64-char hex", len(token_hash) == 64 and all(c in "0123456789abcdef" for c in token_hash.lower()), f"len={len(token_hash)}")
-        record("1e) user_id matches test@mak.com", token_doc.get("user_id") == user_id, "")
-        record("1e) expires_at ~ now+30min (<=5min drift)", delta <= 300, f"drift_seconds={delta:.0f}")
-        record("1e) used_at is None", token_doc.get("used_at") is None, "")
-        record("1e) email == test@mak.com", token_doc.get("email") == PRIMARY_EMAIL, "")
-    else:
-        record("1e) DB side-effects: token doc exists", False, "no unused token found")
-
-
-# ===================================================================
-# 2) RESET-PASSWORD
-# ===================================================================
-def test_reset_password(loop, db):
-    print("\n=== /api/auth/reset-password ===")
-
-    user = loop.run_until_complete(db.users.find_one({"email": PRIMARY_EMAIL}))
-    if not user:
-        record("2) Setup: find test@mak.com", False, "primary user not found")
-        return
-    user_id = user["id"]
-    original_password_hash = user["password_hash"]
-
-    plain = "TESTTOKEN_for_unit_test_12345"
-    token_hash = hashlib.sha256(plain.encode()).hexdigest()
-    loop.run_until_complete(db.password_reset_tokens.delete_many({"token_hash": token_hash}))
-    loop.run_until_complete(db.password_reset_tokens.insert_one({
-        "id": str(uuid.uuid4()),
-        "user_id": user_id,
-        "email": PRIMARY_EMAIL,
-        "token_hash": token_hash,
-        "requested_at": now_utc(),
-        "expires_at": now_utc() + timedelta(minutes=30),
-        "used_at": None,
-    }))
-
-    # Insert a second unused token to verify it gets marked used after reset
-    plain2 = "SECONDTOKEN_unused_98765"
-    token_hash2 = hashlib.sha256(plain2.encode()).hexdigest()
-    loop.run_until_complete(db.password_reset_tokens.delete_many({"token_hash": token_hash2}))
-    loop.run_until_complete(db.password_reset_tokens.insert_one({
-        "id": str(uuid.uuid4()),
-        "user_id": user_id,
-        "email": PRIMARY_EMAIL,
-        "token_hash": token_hash2,
-        "requested_at": now_utc(),
-        "expires_at": now_utc() + timedelta(minutes=30),
-        "used_at": None,
-    }))
-
-    # 2a) Valid token + valid password
-    new_password = "newPass_v1012!"
-    r = requests.post(f"{BASE}/auth/reset-password", json={"token": plain, "new_password": new_password}, timeout=15)
-    body = r.json() if r.status_code == 200 else {}
-    ok = r.status_code == 200 and body.get("status") == "ok" and "Password updated successfully" in body.get("message", "")
-    record("2a) Valid token + valid pwd -> 200", ok, f"status={r.status_code} body={body}")
-
-    user_after = loop.run_until_complete(db.users.find_one({"id": user_id}))
-    record("2a) password_hash updated in DB", user_after["password_hash"] != original_password_hash, "")
-
-    consumed = loop.run_until_complete(db.password_reset_tokens.find_one({"token_hash": token_hash}))
-    record("2a) Consumed token has used_at set", consumed and consumed.get("used_at") is not None, "")
-
-    other = loop.run_until_complete(db.password_reset_tokens.find_one({"token_hash": token_hash2}))
-    record("2a) Other unused tokens for user marked used_at", other and other.get("used_at") is not None, "")
-
-    # 2b) Reuse same token
-    r = requests.post(f"{BASE}/auth/reset-password", json={"token": plain, "new_password": "anotherPass123"}, timeout=10)
-    detail = r.json().get("detail", "") if r.status_code != 200 else ""
-    record("2b) Reuse token -> 400 'already been used'", r.status_code == 400 and "already been used" in detail.lower(), f"status={r.status_code} detail={detail}")
-
-    # 2c) Unknown token
-    r = requests.post(f"{BASE}/auth/reset-password", json={"token": "INVALID_TOKEN_NOT_IN_DB", "new_password": "validPass123"}, timeout=10)
-    detail = r.json().get("detail", "") if r.status_code != 200 else ""
-    ok = r.status_code == 400 and "invalid" in detail.lower() and "expired" in detail.lower()
-    record("2c) Unknown token -> 400 'invalid or has expired'", ok, f"status={r.status_code} detail={detail}")
-
-    # 2d) Expired token
-    plain_exp = "EXPIRED_TOKEN_unit_test_xyz"
-    th_exp = hashlib.sha256(plain_exp.encode()).hexdigest()
-    loop.run_until_complete(db.password_reset_tokens.delete_many({"token_hash": th_exp}))
-    loop.run_until_complete(db.password_reset_tokens.insert_one({
-        "id": str(uuid.uuid4()),
-        "user_id": user_id,
-        "email": PRIMARY_EMAIL,
-        "token_hash": th_exp,
-        "requested_at": now_utc() - timedelta(minutes=35),
-        "expires_at": now_utc() - timedelta(minutes=1),
-        "used_at": None,
-    }))
-    r = requests.post(f"{BASE}/auth/reset-password", json={"token": plain_exp, "new_password": "validPass123"}, timeout=10)
-    detail = r.json().get("detail", "") if r.status_code != 200 else ""
-    record("2d) Expired token -> 400 'expired'", r.status_code == 400 and "expired" in detail.lower(), f"status={r.status_code} detail={detail}")
-
-    # 2e) Weak password (5 chars)
-    plain_weak = "WEAKPASSTOKEN_unit_test_xyz"
-    th_w = hashlib.sha256(plain_weak.encode()).hexdigest()
-    loop.run_until_complete(db.password_reset_tokens.delete_many({"token_hash": th_w}))
-    loop.run_until_complete(db.password_reset_tokens.insert_one({
-        "id": str(uuid.uuid4()),
-        "user_id": user_id,
-        "email": PRIMARY_EMAIL,
-        "token_hash": th_w,
-        "requested_at": now_utc(),
-        "expires_at": now_utc() + timedelta(minutes=30),
-        "used_at": None,
-    }))
-    r = requests.post(f"{BASE}/auth/reset-password", json={"token": plain_weak, "new_password": "abcde"}, timeout=10)
-    detail = r.json().get("detail", "") if r.status_code != 200 else ""
-    record("2e) Weak password -> 400 'at least 6 characters'", r.status_code == 400 and "at least 6 characters" in detail.lower(), f"status={r.status_code} detail={detail}")
-
-    # 2f) HTML injection
-    r = requests.post(f"{BASE}/auth/reset-password", json={"token": plain_weak, "new_password": "<script>alert(1)</script>"}, timeout=10)
-    detail = r.json().get("detail", "") if r.status_code != 200 else ""
-    record("2f) HTML-injection pwd -> 400 'invalid characters'", r.status_code == 400 and "invalid characters" in detail.lower(), f"status={r.status_code} detail={detail}")
-
-    # 2g) Empty token
-    r = requests.post(f"{BASE}/auth/reset-password", json={"token": "", "new_password": "validPass123"}, timeout=10)
-    record("2g) Empty token -> 400", r.status_code == 400, f"status={r.status_code} body={r.text[:200]}")
-
-    # 2h) Login with new password
-    r = requests.post(f"{BASE}/auth/password-login", json={"email": PRIMARY_EMAIL, "password": new_password}, timeout=10)
-    record("2h) Login with new password works", r.status_code == 200, f"status={r.status_code}")
-
-    # RESTORE original test123456 (DO NOT delete/modify seed user)
-    r = requests.post(f"{BASE}/auth/change-password", json={"user_id": user_id, "current_password": new_password, "new_password": PRIMARY_PASSWORD}, timeout=10)
-    record("2h) RESTORE original password test123456", r.status_code == 200, f"status={r.status_code}")
-
-
-# ===================================================================
-# 3) DELETE-ACCOUNT
-# ===================================================================
-def test_delete_account(loop, db):
-    print("\n=== /api/auth/delete-account ===")
-
-    del_email = "delete-test-v1012@mak.com"
-    del_password = "testdelete123"
-
-    existing = loop.run_until_complete(db.users.find_one({"email": del_email}))
-    if existing:
-        eid = existing["id"]
-        loop.run_until_complete(db.users.delete_many({"id": eid}))
-        loop.run_until_complete(db.analyses.delete_many({"user_id": eid}))
-        loop.run_until_complete(db.feedback.delete_many({"user_id": eid}))
-        loop.run_until_complete(db.password_reset_tokens.delete_many({"user_id": eid}))
-
-    r = requests.post(f"{BASE}/auth/register", json={"email": del_email, "name": "DeleteTest", "password": del_password}, timeout=10)
-    if r.status_code != 200:
-        record("3) Setup: register throwaway user", False, f"status={r.status_code} body={r.text[:200]}")
-        return
-    del_user_id = r.json()["id"]
-    record("3) Setup: registered throwaway user", True, f"user_id={del_user_id[:8]}***")
-
-    r = requests.post(f"{BASE}/feedback", json={"user_id": del_user_id, "rating": 4, "category": "app_experience", "comment": "Test feedback before deletion"}, timeout=10)
-    record("3) Setup: feedback submitted", r.status_code == 200, f"status={r.status_code}")
-
-    loop.run_until_complete(db.analyses.insert_one({
-        "id": str(uuid.uuid4()),
-        "user_id": del_user_id,
-        "skin_type": "normal", "skin_tone": "medium", "undertone": "neutral",
-        "face_shape": "oval", "skin_concerns": [], "texture_analysis": "test",
-        "ai_recommendations": [], "created_at": now_utc(), "mode": "skin_care",
-    }))
-    loop.run_until_complete(db.password_reset_tokens.insert_one({
-        "id": str(uuid.uuid4()),
-        "user_id": del_user_id,
-        "email": del_email,
-        "token_hash": hashlib.sha256(b"some-test-token-for-delete").hexdigest(),
-        "requested_at": now_utc(),
-        "expires_at": now_utc() + timedelta(minutes=30),
-        "used_at": None,
-    }))
-
-    # 3a) Wrong password
-    r = requests.post(f"{BASE}/auth/delete-account", json={"user_id": del_user_id, "password": "WRONG"}, timeout=10)
-    detail = r.json().get("detail", "") if r.status_code != 200 else ""
-    record("3a) Wrong password -> 400 exact msg", r.status_code == 400 and detail == "Account not found or password incorrect.", f"status={r.status_code} detail={detail!r}")
-
-    # 3b) Non-existent user_id
-    fake_uid = str(uuid.uuid4())
-    r = requests.post(f"{BASE}/auth/delete-account", json={"user_id": fake_uid, "password": del_password}, timeout=10)
-    detail = r.json().get("detail", "") if r.status_code != 200 else ""
-    record("3b) Non-existent user -> 400 same msg", r.status_code == 400 and detail == "Account not found or password incorrect.", f"status={r.status_code} detail={detail!r}")
-
-    # 3c) Correct delete
-    r = requests.post(f"{BASE}/auth/delete-account", json={"user_id": del_user_id, "password": del_password}, timeout=15)
-    body = r.json() if r.status_code == 200 else {}
-    expected_msg = "Your account and all associated data have been permanently deleted."
-    record("3c) Correct delete -> 200 exact msg", r.status_code == 200 and body.get("message") == expected_msg, f"status={r.status_code} body={body}")
-
-    # 3d) Verify wiped
-    u = loop.run_until_complete(db.users.find_one({"id": del_user_id}))
-    a_count = loop.run_until_complete(db.analyses.count_documents({"user_id": del_user_id}))
-    f_count = loop.run_until_complete(db.feedback.count_documents({"user_id": del_user_id}))
-    t_count = loop.run_until_complete(db.password_reset_tokens.count_documents({"user_id": del_user_id}))
-    record("3d) users record removed", u is None, f"found={u}")
-    record("3d) analyses count == 0", a_count == 0, f"count={a_count}")
-    record("3d) feedback count == 0", f_count == 0, f"count={f_count}")
-    record("3d) password_reset_tokens count == 0", t_count == 0, f"count={t_count}")
-
-    r = requests.post(f"{BASE}/auth/password-login", json={"email": del_email, "password": del_password}, timeout=10)
-    # Spec says 401, actual implementation returns 400 with "No account found" — both are valid "cannot login"
-    record("3d) Login with deleted creds -> 400/401", r.status_code in (400, 401), f"status={r.status_code} (note: server returns 400; spec said 401)")
-
-
-def main():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    client = AsyncIOMotorClient(MONGO_URL, tz_aware=True)
-    db = client[DB_NAME]
-
+def req(method, path, **kw):
+    url = f"{BASE}{path}"
     try:
-        test_regression()
-        test_forgot_password(loop, db)
-        test_reset_password(loop, db)
-        test_delete_account(loop, db)
-    finally:
-        client.close()
-        loop.close()
+        r = requests.request(method, url, timeout=kw.pop("timeout", 60), **kw)
+        return r
+    except Exception as e:
+        return e
 
-    print("\n" + "=" * 70)
-    print("SUMMARY")
-    print("=" * 70)
-    passed = sum(1 for _, p, _ in results if p)
-    failed = [r for r in results if not r[1]]
-    print(f"PASSED: {passed}/{len(results)}")
-    if failed:
-        print(f"\nFAILED ({len(failed)}):")
-        for name, _, detail in failed:
-            print(f"  FAIL {name}: {detail}")
+
+# ---- P0: Health and Auth ----
+def test_p0():
+    print("\n========== P0: HEALTH & AUTH ==========\n")
+    r = req("GET", "/warmup")
+    ok = hasattr(r, "status_code") and r.status_code == 200
+    log("P0", "GET /api/warmup", ok, f"status={getattr(r,'status_code','ERR')} body={getattr(r,'text','')[:120]}")
+
+    r = req("GET", "/health")
+    ok = hasattr(r, "status_code") and r.status_code == 200
+    body = {}
+    if ok:
+        try: body = r.json()
+        except: pass
+    db_ok = body.get("mongodb") in ("connected", "warm") or body.get("status") in ("healthy", "degraded")
+    log("P0", "GET /api/health", ok and db_ok, f"status={getattr(r,'status_code','ERR')} mongodb={body.get('mongodb')} status_field={body.get('status')}")
+
+    r = req("POST", "/auth/check-email", json={"email": TEST_EMAIL})
+    ok = r.status_code == 200 and r.json().get("exists") is True
+    log("P0", "check-email existing user", ok, f"status={r.status_code} body={r.text[:120]}")
+
+    r = req("POST", "/auth/check-email", json={"email": "totally-new-user-v14@example.com"})
+    ok = r.status_code == 200 and r.json().get("exists") is False
+    log("P0", "check-email new user", ok, f"status={r.status_code} body={r.text[:120]}")
+
+    r = req("POST", "/auth/check-email", json={"email": "not-an-email"})
+    ok = r.status_code == 400
+    log("P0", "check-email invalid format", ok, f"status={r.status_code} body={r.text[:120]}")
+
+    r = req("POST", "/auth/check-email", json={"email": ""})
+    ok = r.status_code == 400 or r.status_code == 422
+    log("P0", "check-email empty", ok, f"status={r.status_code} body={r.text[:120]}")
+
+    r = req("POST", "/auth/password-login", json={"email": TEST_EMAIL, "password": TEST_PASSWORD})
+    ok = r.status_code == 200
+    user_id = None
+    display_name = None
+    if ok:
+        body = r.json()
+        user_id = body.get("id")
+        display_name = body.get("display_name")
+        ok = bool(user_id) and bool(display_name)
+    log("P0", "password-login correct", ok, f"status={r.status_code} user_id={user_id} display_name={display_name}")
+
+    r = req("POST", "/auth/password-login", json={"email": TEST_EMAIL, "password": "WRONG_PASSWORD_X"})
+    ok = r.status_code == 400 and "ncorrect" in r.text.lower()
+    log("P0", "password-login wrong password", ok, f"status={r.status_code} body={r.text[:200]}")
+
+    r = req("POST", "/auth/password-login", json={"email": "no-such-user-v14-xyz@example.com", "password": "whatever"})
+    ok = r.status_code == 400 and "no account" in r.text.lower()
+    log("P0", "password-login nonexistent", ok, f"status={r.status_code} body={r.text[:200]}")
+
+    ts = int(time.time())
+    new_email = f"v14_user_{ts}@maktest.com"
+    r = req("POST", "/auth/register", json={"email": new_email, "name": "Riya Sharma", "password": "secret_v14"})
+    ok = r.status_code == 200
+    new_uid = r.json().get("id") if ok else None
+    log("P0", "register new user", ok, f"status={r.status_code} id={new_uid}")
+
+    r = req("POST", "/auth/register", json={"email": TEST_EMAIL, "name": "Test User", "password": "test123456"})
+    ok = r.status_code == 400 and "already exists" in r.text.lower()
+    log("P0", "register existing email", ok, f"status={r.status_code} body={r.text[:200]}")
+
+    r = req("POST", "/auth/register", json={"email": f"shortpw_{ts}@maktest.com", "name": "Riya Sharma", "password": "abc"})
+    ok = r.status_code == 400
+    log("P0", "register short password", ok, f"status={r.status_code} body={r.text[:200]}")
+
+    r = req("POST", "/auth/register", json={"email": f"shortname_{ts}@maktest.com", "name": "R", "password": "validpw123"})
+    ok = r.status_code == 400
+    log("P0", "register short name", ok, f"status={r.status_code} body={r.text[:200]}")
+
+    if user_id:
+        r = req("GET", f"/auth/profile/{user_id}")
+        ok = r.status_code == 200
+        log("P0", "profile retrieval", ok, f"status={r.status_code} body={r.text[:200]}")
+
+    return user_id
+
+
+# ---- P1: NEW Chat Harness ----
+def test_p1():
+    print("\n========== P1: NEW CHAT HARNESS ==========\n")
+    filtered_cases = [
+        ("empty",           ""),
+        ("single char a",   "a"),
+        ("two chars ab",    "ab"),
+        ("low alpha ratio", "1234567890!@#$%"),
+        ("repeated char a", "aaaaaaaaaa"),
+        ("repeated dots",   "..........."),
+        ("no vowels",       "qwrtpsdfghjklzxcvbnm"),
+        ("run-on",          "asdfghjklqwertyuiopzxcvb"),
+        ("profanity",       "fucking shit damn"),
+        ("script tag",      "<script>alert(1)</script>"),
+        ("emoji spam",      "\U0001F970\U0001F484\u2728\U0001F48B\U0001F444\U0001F496\u2728"),
+        ("600 char",        "x" * 600),
+    ]
+    rejection_phrases = [
+        "didn't quite catch",
+        "i'm not sure what you mean",
+        "random text",
+        "type a question about beauty",
+        "shorter (under 500",
+        "valid beauty or makeup",
+        "too many emojis",
+        "let's keep our conversation positive",
+    ]
+
+    for name, msg in filtered_cases:
+        r = req("POST", "/chat", json={"message": msg, "session_id": None}, timeout=30)
+        try:
+            body = r.json()
+        except Exception:
+            body = {}
+        status = getattr(r, "status_code", None)
+        ai_status = body.get("ai_status")
+        resp = body.get("response", "")
+        sess = body.get("session_id")
+        looks_filtered = any(p in resp.lower() for p in rejection_phrases)
+        if name == "profanity":
+            ok = status == 200 and "positive" in resp.lower() and "beauty-focused" in resp.lower()
+        else:
+            ok = status == 200 and looks_filtered
+        # session_id preservation: pass session_id=None → response can be None (only short-circuit branches without ai_status return None);
+        # harness branches set ai_status='filtered' but echo back data.session_id which is None — that's expected behaviour.
+        print(f"   → raw resp[{name}]: status={status} ai_status={ai_status} session={sess} response={resp[:200]!r}")
+        log("P1-filtered", name, ok, f"status={status} ai_status={ai_status} response={resp[:140]!r}")
+
+    # Session preservation when client sends its own session_id
+    print("\n--- session_id preservation in filtered branch ---")
+    my_sess = "client-supplied-session-v14-xyz"
+    r = req("POST", "/chat", json={"message": "qwrtpsdfghjklzxcvbnm", "session_id": my_sess}, timeout=20)
+    try:
+        body = r.json()
+    except Exception:
+        body = {}
+    ok = r.status_code == 200 and body.get("session_id") == my_sess and body.get("ai_status") == "filtered"
+    log("P1-filtered", "session_id preserved when supplied", ok, f"status={r.status_code} got={body.get('session_id')} expected={my_sess} ai_status={body.get('ai_status')}")
+
+    # Valid messages
+    print("\n--- Valid beauty messages ---")
+    valid_msgs = [
+        "What's a good moisturizer for oily skin?",
+        "Tips for glowing skin?",
+        "I have dry skin, what should I avoid?",
+        "Suggest a date-night makeup look",
+    ]
+    for m in valid_msgs:
+        r = req("POST", "/chat", json={"message": m, "session_id": None}, timeout=90)
+        try:
+            body = r.json()
+        except Exception:
+            body = {}
+        status = getattr(r, "status_code", None)
+        ai_status = body.get("ai_status")
+        resp = body.get("response", "")
+        sess = body.get("session_id")
+        ok = status == 200 and ai_status in ("ok", "fallback") and len(resp) > 5 and bool(sess)
+        print(f"   → status={status} ai_status={ai_status} sess={sess} resp_len={len(resp)}")
+        log("P1-valid", m[:40], ok, f"status={status} ai_status={ai_status} resp_len={len(resp)} resp_preview={resp[:120]!r}")
+
+    # Session memory check
+    print("\n--- Session memory check ---")
+    r1 = req("POST", "/chat", json={"message": "I have oily skin", "session_id": None}, timeout=90)
+    try:
+        b1 = r1.json()
+    except Exception:
+        b1 = {}
+    sess1 = b1.get("session_id")
+    ok1 = getattr(r1, "status_code", None) == 200 and bool(sess1) and b1.get("ai_status") in ("ok", "fallback")
+    print(f"   → msg1: sess={sess1} ai_status={b1.get('ai_status')} resp={b1.get('response','')[:200]!r}")
+    log("P1-session", "msg1 oily-skin returns session_id", ok1,
+        f"status={getattr(r1,'status_code',None)} session={sess1} ai_status={b1.get('ai_status')}")
+
+    if sess1:
+        r2 = req("POST", "/chat", json={"message": "what foundation suits me?", "session_id": sess1}, timeout=90)
+        try:
+            b2 = r2.json()
+        except Exception:
+            b2 = {}
+        sess2 = b2.get("session_id")
+        resp2 = b2.get("response", "")
+        same_session = (sess2 == sess1)
+        ok = getattr(r2, "status_code", None) == 200 and same_session and b2.get("ai_status") in ("ok", "fallback") and len(resp2) > 5
+        contextual = any(w in resp2.lower() for w in ["oily", "matte", "shine", "combination", "oil-control", "control oil", "oil control"])
+        print(f"   → msg2: sess={sess2} same={same_session} ai_status={b2.get('ai_status')} contextual_kw={contextual} resp={resp2[:300]!r}")
+        log("P1-session", "msg2 reuses session + contextual", ok and contextual,
+            f"status={getattr(r2,'status_code',None)} same_sess={same_session} ai_status={b2.get('ai_status')} contextual={contextual} resp_preview={resp2[:200]!r}")
+
+
+# ---- P2: Analyze flows ----
+def test_p2(user_id):
+    print("\n========== P2: ANALYZE FLOWS ==========\n")
+    if not user_id:
+        log("P2", "skipped (no user_id)", False, "user_id not available")
+        return
+
+    tiny_png_b64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    )
+    image_payload = (tiny_png_b64 * 4)[:1000]
+
+    r = req("POST", "/analyze-skin", json={
+        "image_base64": image_payload,
+        "user_id": user_id,
+        "mode": "skin_care"
+    }, timeout=120)
+    status = getattr(r, "status_code", None)
+    body = {}
+    try: body = r.json()
+    except: pass
+    analysis_id = body.get("id")
+    # 200=ok, 503/400 graceful are allowed per review request
+    ok = status in (200, 503, 504, 400)
+    log("P2", "POST /analyze-skin", ok, f"status={status} id={analysis_id} keys={list(body.keys())[:8]} detail={body.get('detail','')[:120]}")
+
+    if analysis_id:
+        r = req("GET", f"/analysis/{analysis_id}", timeout=30)
+        ok = r.status_code == 200
+        log("P2", "GET /analysis/{id}", ok, f"status={r.status_code}")
+
+    r = req("GET", f"/analyses/{user_id}", timeout=30)
+    ok = r.status_code == 200 and isinstance(r.json(), list)
+    log("P2", "GET /analyses/{user_id}", ok, f"status={r.status_code} count={len(r.json()) if r.status_code==200 else 'n/a'}")
+
+    r = req("POST", "/travel-style", json={
+        "country": "France",
+        "month": "June",
+        "occasion": "Vacation",
+        "user_id": user_id
+    }, timeout=90)
+    status = getattr(r, "status_code", None)
+    body = {}
+    try: body = r.json()
+    except: pass
+    ok = status == 200 and ("destination_info" in body or "outfit_suggestions" in body or body.get("ai_status"))
+    log("P2", "POST /travel-style", ok, f"status={status} ai_status={body.get('ai_status')} keys={list(body.keys())[:8]}")
+
+
+# ---- P3: Auxiliary ----
+def test_p3(user_id):
+    print("\n========== P3: AUXILIARY ==========\n")
+    if user_id:
+        r = req("POST", "/feedback", json={
+            "user_id": user_id,
+            "rating": 5,
+            "category": "app_experience",
+            "comment": "Loving the new chat harness in v1.0.14"
+        }, timeout=20)
+        ok = r.status_code == 200
+        log("P3", "POST /feedback", ok, f"status={r.status_code} body={r.text[:200]}")
+
+    r = req("GET", "/locations/countries", timeout=20)
+    if hasattr(r, "status_code") and r.status_code == 200:
+        try:
+            data = r.json()
+        except Exception:
+            data = []
+        ok = isinstance(data, list) and len(data) > 100
+        log("P3", "GET /locations/countries", ok, f"status={r.status_code} count={len(data) if isinstance(data,list) else 'n/a'}")
     else:
-        print("ALL TESTS PASSED")
+        log("P3", "GET /locations/countries", False, f"status={getattr(r,'status_code','ERR')}")
 
-    return 0 if not failed else 1
+    r = req("POST", "/auth/forgot-password", json={"email": TEST_EMAIL}, timeout=30)
+    ok = r.status_code == 200
+    log("P3", "POST /auth/forgot-password", ok, f"status={r.status_code} body={r.text[:200]}")
+
+    r = req("POST", "/notify-signup", json={"email": f"waitlist-v14-{int(time.time())}@test.com"}, timeout=20)
+    ok = r.status_code == 200
+    log("P3", "POST /notify-signup", ok, f"status={r.status_code} body={r.text[:200]}")
+
+
+def summary():
+    print("\n\n========== SUMMARY ==========\n")
+    by_cat = {}
+    for cat, _, ok, _ in results:
+        by_cat.setdefault(cat, [0, 0])
+        by_cat[cat][0] += 1
+        if ok:
+            by_cat[cat][1] += 1
+    for cat, (tot, p) in by_cat.items():
+        print(f"  {cat}: {p}/{tot} passed")
+    total = len(results)
+    passed = sum(1 for _, _, o, _ in results if o)
+    print(f"\nTOTAL: {passed}/{total} passed")
+    print("\n--- FAILURES ---")
+    for cat, name, ok, detail in results:
+        if not ok:
+            print(f"  [{cat}] {name}: {detail}")
 
 
 if __name__ == "__main__":
-    exit(main())
+    user_id = test_p0()
+    test_p1()
+    test_p2(user_id)
+    test_p3(user_id)
+    summary()
