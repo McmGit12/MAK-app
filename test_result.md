@@ -2765,3 +2765,6 @@ frontend:
 
           Also rendered cleanly at 320x568 (iPhone SE) with 0px horizontal overflow.
 
+
+  - agent: "main"
+    message: "v1.0.15 — Google Play rejection fix ('Username or password you provided didn't work'). Backend: self-healing reviewer account test@mak.com/test123456 (ensure_review_account: seeded on startup, re-synced on login with declared password, recreated if deleted; wrong password still 400). Verified via curl: change-password → login with declared pw 200; delete-account → check-email exists=true → login 200. Frontend index.tsx: network/server errors no longer labelled 'Incorrect password'; password inputs autoCapitalize none. Screenshot-verified wrong-password message + successful login. app.json 1.0.15 / versionCode 115."

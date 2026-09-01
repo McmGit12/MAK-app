@@ -12,6 +12,14 @@ type Step = 'email' | 'signin' | 'register';
 
 const sanitize = (text: string) => text.replace(/<[^>]*>|javascript:|on\w+=/gi, '');
 
+// Never label a network/server failure as a credentials problem — that misleads
+// users (and app-store reviewers) into thinking the password is wrong.
+const authErrorMessage = (err: any, fallback: string) => {
+  if (err?.response?.data?.detail) return err.response.data.detail;
+  if (!err?.response) return "Couldn't reach MAK servers. Please check your connection and try again.";
+  return fallback;
+};
+
 export default function LoginScreen() {
   const router = useRouter();
   const { login, user } = useAuth();
@@ -41,7 +49,7 @@ export default function LoginScreen() {
       const res = await api.checkEmail(e);
       setStep(res.exists ? 'signin' : 'register');
     } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Something went wrong. Please try again.');
+      setError(authErrorMessage(err, 'Something went wrong. Please try again.'));
     } finally { setLoading(false); }
   };
 
@@ -54,7 +62,7 @@ export default function LoginScreen() {
       // Navigate explicitly after successful login
       setTimeout(() => router.replace('/(tabs)'), 100);
     } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Incorrect password. Please try again.');
+      setError(authErrorMessage(err, 'Sign in failed. Please try again.'));
     } finally { setLoading(false); }
   };
 
@@ -70,7 +78,7 @@ export default function LoginScreen() {
       // Navigate explicitly after successful registration
       setTimeout(() => router.replace('/(tabs)'), 100);
     } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Registration failed. Please try again.');
+      setError(authErrorMessage(err, 'Registration failed. Please try again.'));
     } finally { setLoading(false); }
   };
 
@@ -122,7 +130,7 @@ export default function LoginScreen() {
                 <Text style={[st.cardSub, { color: colors.textSecondary }]}>{email}</Text>
                 <View style={[st.inputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                   <Ionicons name="lock-closed" size={18} color={colors.primary} />
-                  <TextInput style={[st.input, { color: colors.text }]} placeholder="Password" placeholderTextColor={colors.textTertiary} value={password} onChangeText={setPassword} secureTextEntry={!showPassword} />
+                  <TextInput style={[st.input, { color: colors.text }]} placeholder="Password" placeholderTextColor={colors.textTertiary} value={password} onChangeText={setPassword} secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} autoComplete="password" textContentType="password" returnKeyType="go" onSubmitEditing={handleSignIn} />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)}><Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={colors.textTertiary} /></TouchableOpacity>
                 </View>
                 <TouchableOpacity style={[st.btn, { backgroundColor: colors.primary }]} onPress={handleSignIn} disabled={loading}>
@@ -146,12 +154,12 @@ export default function LoginScreen() {
                 </View>
                 <View style={[st.inputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                   <Ionicons name="lock-closed" size={18} color={colors.primary} />
-                  <TextInput style={[st.input, { color: colors.text }]} placeholder="Password (min 6 characters)" placeholderTextColor={colors.textTertiary} value={password} onChangeText={setPassword} secureTextEntry={!showPassword} />
+                  <TextInput style={[st.input, { color: colors.text }]} placeholder="Password (min 6 characters)" placeholderTextColor={colors.textTertiary} value={password} onChangeText={setPassword} secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} autoComplete="new-password" textContentType="newPassword" />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)}><Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={colors.textTertiary} /></TouchableOpacity>
                 </View>
                 <View style={[st.inputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                   <Ionicons name="lock-closed" size={18} color={colors.secondary} />
-                  <TextInput style={[st.input, { color: colors.text }]} placeholder="Confirm Password" placeholderTextColor={colors.textTertiary} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
+                  <TextInput style={[st.input, { color: colors.text }]} placeholder="Confirm Password" placeholderTextColor={colors.textTertiary} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete="new-password" textContentType="newPassword" />
                 </View>
                 <TouchableOpacity style={[st.btn, { backgroundColor: colors.primary }]} onPress={handleRegister} disabled={loading}>
                   {loading ? <ActivityIndicator color="#FFF" /> : <Text style={st.btnText}>Create Account</Text>}

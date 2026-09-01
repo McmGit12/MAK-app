@@ -769,6 +769,62 @@ def verify_password(password: str, hashed: str) -> bool:
 
 
 # ============================================================
+# APP-STORE REVIEWER ACCOUNT — self-healing demo credentials.
+# Google Play / App Store reviewers log in with these credentials (declared in
+# Play Console → App content → App access). The account MUST always work, so:
+#   • it is (re)created at startup if missing,
+#   • its password is re-synced whenever someone signs in with the declared
+#     password (covers the case where a tester changed it via change/forgot-password),
+#   • it is recreated on the fly if it was deleted via "Delete account".
+# Credentials are configured via env so they can be rotated without a code change.
+# ============================================================
+REVIEW_ACCOUNT_EMAIL = os.environ.get("REVIEW_ACCOUNT_EMAIL", "test@mak.com").strip().lower()
+REVIEW_ACCOUNT_PASSWORD = os.environ.get("REVIEW_ACCOUNT_PASSWORD", "test123456")
+REVIEW_ACCOUNT_NAME = os.environ.get("REVIEW_ACCOUNT_NAME", "MAK Reviewer")
+
+
+def is_review_account(email: str) -> bool:
+    return bool(REVIEW_ACCOUNT_EMAIL) and email.strip().lower() == REVIEW_ACCOUNT_EMAIL
+
+
+async def ensure_review_account() -> Optional[dict]:
+    """Guarantee the reviewer account exists and accepts REVIEW_ACCOUNT_PASSWORD.
+    Idempotent. Returns the user document (or None if the feature is disabled)."""
+    if not REVIEW_ACCOUNT_EMAIL or not REVIEW_ACCOUNT_PASSWORD:
+        return None
+    user_hash = hash_identifier(REVIEW_ACCOUNT_EMAIL)
+    user = await db.users.find_one({"user_hash": user_hash, "login_method": "email"})
+    if user:
+        stored_hash = user.get("password_hash") or ""
+        password_ok = False
+        try:
+            password_ok = bool(stored_hash) and verify_password(REVIEW_ACCOUNT_PASSWORD, stored_hash)
+        except ValueError:
+            password_ok = False  # corrupt/legacy hash → re-sync below
+        if not password_ok:
+            new_hash = hash_password(REVIEW_ACCOUNT_PASSWORD)
+            await db.users.update_one({"id": user["id"]}, {"$set": {"password_hash": new_hash, "email": REVIEW_ACCOUNT_EMAIL}})
+            user["password_hash"] = new_hash
+            logger.info("Review account password re-synced to configured value")
+        return user
+
+    new_user = {
+        "id": generate_user_id(),
+        "user_hash": user_hash,
+        "login_method": "email",
+        "display_name": REVIEW_ACCOUNT_NAME,
+        "password_hash": hash_password(REVIEW_ACCOUNT_PASSWORD),
+        "email": REVIEW_ACCOUNT_EMAIL,
+        "phone": None,
+        "country_code": None,
+        "created_at": now_utc(),
+    }
+    await db.users.insert_one(new_user)
+    logger.info("Review account created")
+    return new_user
+
+
+# ============================================================
 # LOCATION DATA ENDPOINTS — replaces frontend country-state-city library
 # Eliminates ~7-8MB from APK bundle. Frontend fetches lazily on picker open.
 # ============================================================
@@ -853,6 +909,8 @@ async def check_email(data: CheckEmailRequest):
     if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
         raise HTTPException(status_code=400, detail="Please enter a valid email address.")
     user_hash = hash_identifier(email)
+    if is_review_account(email):
+        await db_with_timeout(ensure_review_account())
     existing = await db_with_timeout(db.users.find_one({"user_hash": user_hash, "login_method": "email"}, {"_id": 1}))
     return {"exists": existing is not None}
 
@@ -897,6 +955,10 @@ async def password_login(data: PasswordLoginRequest):
     """Sign in with email and password"""
     email = data.email.strip().lower()
     user_hash = hash_identifier(email)
+    # Reviewer account: signing in with the declared password always works
+    # (self-heals a changed password or a deleted account).
+    if is_review_account(email) and data.password == REVIEW_ACCOUNT_PASSWORD:
+        await ensure_review_account()
     user = await db.users.find_one({"user_hash": user_hash, "login_method": "email"})
     if not user:
         raise HTTPException(status_code=400, detail="No account found with this email.")
@@ -1797,6 +1859,13 @@ async def startup_event():
         logger.info("MongoDB indexes ensured")
     except Exception as e:
         logger.warning(f"Index creation failed (non-fatal): {str(e)[:100]}")
+
+    # Guarantee the app-store reviewer account exists with the declared password
+    try:
+        await asyncio.wait_for(ensure_review_account(), timeout=10)
+        logger.info(f"Review account ready: {REVIEW_ACCOUNT_EMAIL}")
+    except Exception as e:
+        logger.warning(f"Review account seed failed (non-fatal, self-heals on login): {str(e)[:100]}")
 
 # Include the router in the main app
 app.include_router(api_router)
