@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput, FlatList, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput, FlatList, Modal, Pressable, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -196,6 +196,10 @@ export default function AnalyzeScreen() {
         Alert.alert(
           'Photos Access Needed',
           'MAK needs access to your photos to analyze your selfie. You can enable this in Settings > MAK > Photos.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ],
         );
         return;
       }
@@ -226,6 +230,10 @@ export default function AnalyzeScreen() {
         Alert.alert(
           'Camera Access Needed',
           'MAK needs camera access to take your selfie. You can enable this in Settings > MAK > Camera.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ],
         );
         return;
       }

@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mak.makeupbuddy",
-      "buildNumber": "3",
+      "buildNumber": "15",
       "infoPlist": {
         "NSCameraUsageDescription": "Take selfies for personalized skin analysis",
         "NSPhotoLibraryUsageDescription": "Select photos for skin analysis",

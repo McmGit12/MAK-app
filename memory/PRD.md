@@ -47,3 +47,10 @@ Rejection: "Username or password you provided didn't work" (reviewer saw "Incorr
 - Backend: self-healing app-store reviewer account (`ensure_review_account`, env `REVIEW_ACCOUNT_EMAIL/PASSWORD/NAME`, default test@mak.com / test123456). Seeded at startup, re-synced when someone signs in with the declared password, recreated on the fly via check-email/login if deleted. Wrong passwords are still rejected.
 - Frontend (login screen): network/server failures no longer show "Incorrect password" (new `authErrorMessage` helper); password inputs have autoCapitalize="none"/autoCorrect={false}/autoComplete; Enter submits sign-in.
 - Version bumped to 1.0.15 / versionCode 115. Production backend URL: https://mak-makeup-buddy.emergent.host
+
+## iOS pre-release pass (v1.0.15, iOS buildNumber 15)
+- Checks: icon 1024 RGB no alpha ✓, bundle id com.mak.makeupbuddy ✓, camera/photo usage strings ✓, ITSAppUsesNonExemptEncryption=false ✓, account deletion + Terms/Privacy ✓, supportsTablet kept ON (user choice; iPad screenshots already uploaded), tsc clean.
+- Permission alerts (camera/photos) now include "Open Settings" (Linking.openSettings).
+- testing_agent iteration_3: 26/26 backend + frontend E2E PASS. Regression suite: /app/backend/tests/test_ios_pre_release.py.
+- Production backend also reachable at https://complexion-fit.emergent.host (self-heal fix verified live).
+- Privacy facts for App Store labels: photos are NOT stored (only analysis results), email stored for account, device_id for install analytics, feedback text.
