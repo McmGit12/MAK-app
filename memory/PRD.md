@@ -54,3 +54,9 @@ Rejection: "Username or password you provided didn't work" (reviewer saw "Incorr
 - testing_agent iteration_3: 26/26 backend + frontend E2E PASS. Regression suite: /app/backend/tests/test_ios_pre_release.py.
 - Production backend also reachable at https://complexion-fit.emergent.host (self-heal fix verified live).
 - Privacy facts for App Store labels: photos are NOT stored (only analysis results), email stored for account, device_id for install analytics, feedback text.
+
+## v1.0.15 iOS build 16 (backup build) — App Store readiness fixes
+- app.json: microphonePermission:false on expo-camera + expo-image-picker, recordAudioAndroid:false (no NSMicrophoneUsageDescription / RECORD_AUDIO); ios.requireFullScreen:true (iPad locked to portrait, supportsTablet kept); iOS buildNumber 16; android versionCode 116.
+- Backend: early "Image is too large" guard at >15M base64 chars in analyze_skin_with_ai.
+- Verified via `npx expo config --type introspect` + testing_agent iteration_4 (70/70 backend after guard fix; frontend E2E pass). Regression suites: backend/tests/test_ios_pre_release.py, test_ios_build16_config.py, test_ios_build16_edge_cases.py.
+- Readiness review warnings left by user choice: "Coming Soon" section on Home kept.

@@ -1,0 +1,54 @@
+{
+  "summary": "iOS build 16 (v1.0.15) verification complete. TWO App-Store fixes VERIFIED via `npx expo config --type introspect --json` (13/13 config assertions PASS): (Fix 1) Microphone permission removed — Info.plist has NO NSMicrophoneUsageDescription, Android permissions do NOT include RECORD_AUDIO but DO include CAMERA. NSCameraUsageDescription and NSPhotoLibraryUsageDescription present and non-generic. (Fix 2) iPad locked to portrait — UIRequiresFullScreen=true, supportsTablet=true, UISupportedInterfaceOrientations=[Portrait, PortraitUpsideDown], no UISupportedInterfaceOrientations~ipad override. Version metadata correct: CFBundleShortVersionString='1.0.15', CFBundleVersion='16', ITSAppUsesNonExemptEncryption=false, Android versionCode=116. Static checks: `npx tsc --noEmit` exits 0, preview URL serves 200 with #root rendering login screen, GET /api/health 200 (mongodb=connected, llm_key_configured=true), GET /api/warmup 200 in 0.24s. Backend regression: 26/26 test_ios_pre_release.py PASS (self-heal reviewer account: login → change-password with 'Temp98765' → login with test123456 still 200 via self-heal → wrong-password shows 'Incorrect password. Please try again.' → delete-account → auto-recreate as 'MAK Reviewer' → renamed back to 'Test User'). Skin analysis with real face photo returned skin_type/skin_tone/undertone/face_shape in both skin_care and makeup modes; identical second call hit SHA-256 cache in <5s. Extended edge-cases suite (29/31 PASS, 2 minor non-blocking): check-email (invalid format 422, unknown false, known true), register short-name 422, HTML in name 422, email case/whitespace insensitivity (' TEST@MAK.com ' → logs in as test@mak.com), unknown-email login 400 with 'No account found', wrong-password 400 with 'Incorrect password', analyze-skin empty/tiny/oversized/unknown-user all return clean 4xx (never 500), 1x1 PNG returns clean 4xx/503, GET /api/analyses/{uid} timestamps all end with '+00:00', analysis/nonexistent 404, travel-style missing-country 422, locations/states/XX and cities/US/ZZ return empty arrays, states/IN has 30+ entries, chat session_id reuse 200, feedback rating 0 and 6 rejected 422, feedback list 200, notify-signup valid+duplicate handled, invalid email 422, forgot-password known+unknown both neutral 200, reset-password bogus token 400/404, reset-password short new_password 400. Frontend E2E on mobile 390x844: login flow (email → Continue → 'Welcome back!' → wrong password shows inline 'Incorrect password.' → correct password → Home with 'Good Morning, Test User' greeting), History shows 3 analyses with local-timezone-formatted dates, Analyze tab shows all 3 mode chips (Skin Care/Makeup/Travel) with 'First scan after install may take up to 30 seconds — that's normal ✨' banner, Profile shows 'Test User', Ask MAK FAB visible. ZERO occurrences of 'Oops!', 'Sorry we are experiencing', 'undefined', 'NaN', '[object Object]' anywhere in rendered UI. iOS build 16 is READY FOR APP STORE SUBMISSION.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/analyze-skin (oversized image >15M chars)",
+        "issue": "Returns 400 with 'Image couldn't be processed. Please use a clear photo.' instead of the spec-specified 'Image is too large. Please use a smaller photo.' Endpoint still correctly rejects with 400 (never a 500 or hang), so functionally safe. Root cause likely that oversized 'A'*15000001 payload fails base64 decode ordering before size guard fires. Not user-facing since the frontend enforces client-side image size limits before uploading."
+      },
+      {
+        "endpoint": "POST /api/chat with empty message",
+        "issue": "Returns 200 instead of 400/422 for empty-string body. Backend produces a graceful chatbot response. Frontend disables Send when input is empty, so this is not user-reachable; recommend adding server-side min-length validation for defense-in-depth (non-blocking for App Store)."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_ios_pre_release.py",
+    "/app/backend/tests/test_ios_build16_config.py",
+    "/app/backend/tests/test_ios_build16_edge_cases.py",
+    "/app/test_reports/pytest/pytest_ios_prerelease_build16.xml",
+    "/app/test_reports/pytest/pytest_ios_build16_config.xml",
+    "/app/test_reports/pytest/pytest_ios_build16_edges.xml"
+  ],
+  "action_items": [
+    "None blocking for App Store. OPTIONAL server-side hardening (non-blocking): add min-length validation for POST /api/chat message (currently accepts empty string with 200); tune analyze-skin size-check order so 'Image is too large' message fires for genuinely-oversized payloads (functional 400 already returned).",
+    "test@mak.com display_name was renamed back to 'Test User' at the end of both test_ios_pre_release.TestReviewAccountSelfHeal.test_4 and test_ios_build16_edge_cases.TestZFinalRestore — verified in Home greeting ('Good Morning, Test User').",
+    "Network-failure UI path (route abort → 'Couldn't reach MAK servers...' message) was NOT exercised in this run; already verified in iteration_3. No frontend code changed since — safe to skip."
+  ],
+  "critical_code_review_comments": [
+    "app.json Fix 1 correctly wires microphonePermission:false on BOTH expo-camera and expo-image-picker plugins, plus recordAudioAndroid:false on expo-camera — verified in introspect output that NSMicrophoneUsageDescription is completely absent and android.permissions omits RECORD_AUDIO (no orphan permission from expo-camera plugin defaults).",
+    "app.json Fix 2 correctly sets ios.requireFullScreen:true — introspect confirms UIRequiresFullScreen:true, orientation lock is only [Portrait, PortraitUpsideDown], and there is no UISupportedInterfaceOrientations~ipad override that would allow landscape on iPad. supportsTablet:true retained so iPad users can still install, but the app will now be locked to portrait as the reviewer required.",
+    "ensure_review_account self-heal (server.py) correctly restores test@mak.com/test123456 after password change AND after account deletion — verified across 3 different test runs in this iteration.",
+    "Registration validation returns HTTP 422 (FastAPI Pydantic default) not 400 as request spec suggested. Client treats any non-200 as error via authErrorMessage helper — no UI impact."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_ios_build16_config.py (NEW — 13 introspect-based config assertions for Fix 1 & Fix 2 & version metadata)",
+    "/app/backend/tests/test_ios_build16_edge_cases.py (NEW — 31 extended edge-case pytest cases)"
+  ],
+  "success_rate": {
+    "backend": "98.6% (68/70 — 26/26 pre-release regression + 13/13 config + 29/31 extended edges; 2 non-blocking minor issues)",
+    "frontend": "100% of critical UI flows verified (login/wrong-pwd inline error/home greeting/history/analyze modes/first-scan banner/profile/FAB), 0 forbidden phrases"
+  },
+  "seed_data_creation": "Ephemeral QA users (ios_qa_<ts>@mak.com and notify_<ts>@mak.com) created and cleaned up within their test classes. Reviewer account (test@mak.com) was deleted & auto-recreated by ensure_review_account, then display_name renamed back to 'Test User'. Existing analyses under test@mak.com remain (3 items from prior cache-seed runs) — harmless.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend suites for iOS build 16: (1) /app/backend/tests/test_ios_pre_release.py — 26-case regression covering reviewer self-heal, auth lifecycle, real-face-photo analysis, travel-style, chat, feedback, locations, forgot-password. (2) /app/backend/tests/test_ios_build16_config.py — 13-case config verification runs `npx expo config --type introspect --json` and asserts Info.plist + Android permissions. Uses subprocess.run in /app/frontend. (3) /app/backend/tests/test_ios_build16_edge_cases.py — 31-case extended edge-case matrix. All three suites use EXPO_PUBLIC_BACKEND_URL env var with preview URL fallback. Total runtime ~45s. Known non-blocking minor issues: analyze-skin oversized returns generic 400 message instead of 'Image is too large', chat empty message returns 200 instead of 422.",
+  "rca_of_issue": "No bugs found in the two App-Store fixes. Both fixes verified end-to-end via `npx expo config --type introspect`: (a) Fix 1 works because expo-camera plugin config { microphonePermission:false, recordAudioAndroid:false } instructs the plugin to skip injecting NSMicrophoneUsageDescription/RECORD_AUDIO; expo-image-picker { microphonePermission:false } prevents its default mic injection. Introspect output confirms all three suppressions active. (b) Fix 2 works because ios.requireFullScreen:true translates directly to UIRequiresFullScreen:true in Info.plist, and Expo's default orientation:'portrait' produces [Portrait, PortraitUpsideDown] only, with no iPad-specific landscape override. Combination lets the iPad still be a valid install target (supportsTablet:true) but locks the runtime UI to portrait as the App Store reviewer required."
+}

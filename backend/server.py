@@ -427,6 +427,13 @@ async def analyze_skin_with_ai(image_base64: str, mode: str = "skin_care") -> Di
         image_base64 = image_base64.split(";base64,", 1)[1]
     # Strip ALL whitespace and CR/LF (browsers sometimes wrap base64 to 76 chars)
     image_base64 = "".join(image_base64.split())
+    # Early size guard on the encoded payload (15M base64 chars ≈ 11 MB binary) —
+    # gives the correct "too large" message and avoids decoding a huge blob.
+    if len(image_base64) > 15_000_000:
+        raise HTTPException(
+            status_code=400,
+            detail="Image is too large. Please use a smaller photo."
+        )
     # Pad to a multiple of 4 if the upload truncated trailing '='
     pad_needed = (-len(image_base64)) % 4
     if pad_needed:

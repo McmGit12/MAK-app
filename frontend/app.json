@@ -10,8 +10,9 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "requireFullScreen": true,
       "bundleIdentifier": "com.mak.makeupbuddy",
-      "buildNumber": "15",
+      "buildNumber": "16",
       "infoPlist": {
         "NSCameraUsageDescription": "Take selfies for personalized skin analysis",
         "NSPhotoLibraryUsageDescription": "Select photos for skin analysis",
@@ -20,7 +21,7 @@
     },
     "android": {
       "package": "com.mak.makeupbuddy",
-      "versionCode": 115,
+      "versionCode": 116,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#FFF8F5"
@@ -42,13 +43,16 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow MAK to access your camera for skin analysis"
+          "cameraPermission": "Allow MAK to access your camera for skin analysis",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow MAK to access your photos for skin analysis"
+          "photosPermission": "Allow MAK to access your photos for skin analysis",
+          "microphonePermission": false
         }
       ],
       "expo-web-browser",
