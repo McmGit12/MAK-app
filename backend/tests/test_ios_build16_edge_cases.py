@@ -252,6 +252,33 @@ class TestForgotResetPassword:
         r = session.post(f"{API}/auth/forgot-password", json={"email": REVIEW_EMAIL}, timeout=30)
         assert r.status_code == 200
 
+    def test_forgot_review_account_no_token_created(self, session):
+        """BUG FIX regression: review account (test@mak.com) must short-circuit —
+        neutral 200 + ZERO reset tokens created + NO email sent.
+        Covers plain, upper-cased and whitespace-padded variants (email normalization).
+        """
+        from pymongo import MongoClient
+        from datetime import datetime, timezone
+        client = MongoClient(os.environ.get("MONGO_URL", "mongodb://localhost:27017"))
+        db_name = os.environ.get("DB_NAME", "complexionfit_db")
+        coll = client[db_name]["password_reset_tokens"]
+
+        test_start = datetime.now(timezone.utc)
+        for variant in (REVIEW_EMAIL, REVIEW_EMAIL.upper(), f"  {REVIEW_EMAIL}  "):
+            r = session.post(f"{API}/auth/forgot-password",
+                             json={"email": variant}, timeout=30)
+            assert r.status_code == 200, r.text
+            body = r.json()
+            assert body.get("status") == "ok"
+            assert "registered with MAK" in body.get("message", "")
+
+        count = coll.count_documents({
+            "email": REVIEW_EMAIL,
+            "requested_at": {"$gte": test_start},
+        })
+        assert count == 0, f"Expected 0 reset tokens for review account, found {count}"
+        client.close()
+
     def test_forgot_unknown_neutral(self, session):
         r = session.post(f"{API}/auth/forgot-password",
                          json={"email": f"absent_{int(time.time())}@mak.com"}, timeout=30)

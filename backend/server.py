@@ -1055,6 +1055,14 @@ async def forgot_password(data: ForgotPasswordRequest):
         # Still neutral — don't reveal the format check
         return {"status": "ok", "message": _NEUTRAL_RESET_MSG}
 
+    # Reviewer/demo account: never email it. Its mailbox doesn't exist (store
+    # reviewers and automated tests tap "Forgot password?" with it), which only
+    # produced bounce notifications in the support inbox. Its password is fixed
+    # and self-healing anyway, so a reset link would be pointless.
+    if is_review_account(email):
+        logger.info("Password reset requested for review account — skipped (no email sent)")
+        return {"status": "ok", "message": _NEUTRAL_RESET_MSG}
+
     # Rate limit: count requests for THIS email in the last hour
     one_hour_ago = now_utc() - timedelta(hours=1)
     try:
